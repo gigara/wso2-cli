@@ -277,3 +277,76 @@ jobs:
       - name: Deploy to Pages
         id: deploy
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+      # GitHub Pages keys deployments by commit SHA (pages_build_version). When two
+      # module releases are tagged on the same commit SHA, actions/deploy-pages
+      # reports success even though GitHub Pages deduplicated the request and
+      # skipped serving the newly uploaded artifact (wso2/wso2-cli#209).
+      #
+      # Polling the live origin guarantees that this job fails rather than
+      # reporting a false positive when the released version was not actually served.
+      - name: Verify the released version is served live
+        env:
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: |
+          set -euo pipefail
+
+          namespace="${GITHUB_REF_NAME%%/*}"
+          version="${GITHUB_REF_NAME##*/v}"
+          index_endpoint="${PAGE_URL%/}/index.json"
+          module_endpoint="${PAGE_URL%/}/modules/${namespace}.json"
+
+          # Determine whether this release is expected to be advertised in index.json.
+          # If site/index.json advertises this version on a channel, the live index
+          # must advertise it too. Otherwise, the live index must at least carry
+          # the product namespace.
+          check_index_version=false
+          if jq -e --arg ns "${namespace}" --arg ver "${version}" \
+            '.modules[] | select(.namespace == $ns) | .channels[] | select(.version == $ver)' \
+            "site/index.json" >/dev/null 2>&1; then
+            check_index_version=true
+          fi
+
+          echo "Verifying ${namespace} v${version} is served live at ${module_endpoint} and ${index_endpoint}..."
+          for attempt in $(seq 1 18); do
+            ts="$(date +%s)"
+            module_ok=false
+            index_ok=false
+
+            if module_content="$(curl --connect-timeout 5 --max-time 10 -fsSL "${module_endpoint}?t=${ts}" 2>/dev/null)"; then
+              if jq -e --arg ver "${version}" \
+                '.versions[] | select(.version == $ver)' \
+                <<<"${module_content}" >/dev/null 2>&1; then
+                module_ok=true
+              fi
+            fi
+
+            if index_content="$(curl --connect-timeout 5 --max-time 10 -fsSL "${index_endpoint}?t=${ts}" 2>/dev/null)"; then
+              if [ "${check_index_version}" = "true" ]; then
+                if jq -e --arg ns "${namespace}" --arg ver "${version}" \
+                  '.modules[] | select(.namespace == $ns) | .channels[] | select(.version == $ver)' \
+                  <<<"${index_content}" >/dev/null 2>&1; then
+                  index_ok=true
+                fi
+              else
+                if jq -e --arg ns "${namespace}" \
+                  '.modules[] | select(.namespace == $ns)' \
+                  <<<"${index_content}" >/dev/null 2>&1; then
+                  index_ok=true
+                fi
+              fi
+            fi
+
+            if [ "${module_ok}" = "true" ] && [ "${index_ok}" = "true" ]; then
+              echo "Verified: ${namespace} v${version} is live in both modules/${namespace}.json and index.json"
+              exit 0
+            fi
+
+            echo "Waiting for GitHub Pages deployment to serve ${namespace} v${version} (attempt ${attempt}/18)..."
+            sleep 5
+          done
+
+          echo "::error::The published catalog on GitHub Pages does not serve ${namespace} v${version} in index.json and modules/${namespace}.json"
+          echo "::error::GitHub Pages skips deployments when two module releases share the same commit SHA (${GITHUB_SHA})"
+          echo "::error::Workaround: push a new commit to main and trigger the 'Catalog origin' workflow (pages.yml)"
+          exit 1
