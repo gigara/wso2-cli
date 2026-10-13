@@ -402,6 +402,15 @@ the permissions it needs: the gate and the catalog jobs read repository
 contents, the publish job alone writes them, and only the deploying job holds
 Pages access.
 
+Deploying to GitHub Pages keys deployments by commit SHA (`pages_build_version`).
+If multiple module tags are released from the same commit SHA, GitHub Pages
+deduplicates the deployment request and skips subsequent uploads, serving only the
+catalog from the first release. The `module-release` workflow verifies that the
+newly released module is served live by the Pages origin before succeeding. If
+multiple modules must be released together, ensure their tags point to distinct
+commits, or dispatch `.github/workflows/pages.yml` on a new commit on `main` to
+regenerate and deploy the catalog covering all published tags.
+
 Whoever can publish to that origin controls the update channel for the shell
 and for every module. That exposure already existed for the install scripts,
 and serving the catalog there grows its blast radius rather than creating it.
