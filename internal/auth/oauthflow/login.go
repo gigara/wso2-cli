@@ -57,7 +57,7 @@ import (
 	oidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/wso2/wso2-cli/internal/auth/issuertrust"
+	"github.com/wso2/wso2-cli/internal/auth/oidcdiscovery"
 	"github.com/wso2/wso2-cli/internal/auth/trustedhttp"
 	"github.com/wso2/wso2-cli/internal/output"
 
@@ -98,6 +98,10 @@ func LoopbackPorts() []int { return []int{10425, 10426, 10427, 10428} }
 type Login struct {
 	// Issuer is the OpenID provider to discover and authenticate against.
 	Issuer string
+	// IssuerID is the issuer identifier the context declares the provider
+	// names, when that is not Issuer. Discovery and the identity token are
+	// held to it; it is empty for a provider that names Issuer itself.
+	IssuerID string
 	// ClientID is the public OAuth client this shell presents itself as. There
 	// is deliberately no client secret: PKCE is the proof of possession.
 	ClientID string
@@ -185,24 +189,16 @@ type Result struct {
 // produced it, and this shell renders problems verbatim.
 func (l Login) Run(ctx context.Context) (Result, error) {
 	ctx = oidc.ClientContext(ctx, l.httpClient())
-	provider, err := oidc.NewProvider(ctx, l.Issuer)
+	provider, err := oidcdiscovery.Discover(ctx, l.Issuer, l.IssuerID)
 	if err != nil {
-		if issuertrust.Untrusted(err) {
-			return Result{}, issuertrust.Problem(l.Issuer)
-		}
-		return Result{}, discoveryFailed(
-			"the shell could not read the identity provider's OpenID configuration",
-			"Check the issuer of the selected context and that this machine can reach it, then retry.")
-	}
-	if issuertrust.Plaintext(provider.Claims) {
-		return Result{}, issuertrust.PlaintextProblem()
+		return Result{}, err
 	}
 	var capabilities struct {
 		CodeChallengeMethods []string `json:"code_challenge_methods_supported"`
 	}
 	if err := provider.Claims(&capabilities); err != nil ||
 		!slices.Contains(capabilities.CodeChallengeMethods, challengeMethodS256) {
-		return Result{}, discoveryFailed(
+		return Result{}, oidcdiscovery.Failed(
 			"the identity provider does not advertise the S256 code challenge method",
 			"Enable PKCE with S256 on the registered OAuth application, or select a context whose "+
 				"issuer supports it. This shell is a public client and does not log in without it.")
@@ -398,7 +394,7 @@ func bindLoopback(ports []int) (net.Listener, error) {
 	}
 	// The stable code list is closed and names no port-exhaustion code, so this
 	// travels as a discovery failure whose message states the real cause.
-	return nil, discoveryFailed("no loopback callback port is available for the browser login",
+	return nil, oidcdiscovery.Failed("no loopback callback port is available for the browser login",
 		fmt.Sprintf("Free one of the ports %s on 127.0.0.1, then retry. The shell accepts a login "+
 			"callback only on the ports the OAuth application registers.", portList()))
 }
@@ -425,10 +421,6 @@ func randomValue() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
-}
-
-func discoveryFailed(message, recovery string) problem.Problem {
-	return problem.New(problem.CategoryAuthPolicy, "auth.discovery_failed", message).WithRecovery(recovery)
 }
 
 // notCompleted reports a login that started and produced no session.
@@ -508,6 +500,13 @@ func identityNotVerified(err error) problem.Problem {
 		return notCompleted("the identity token this login returned was issued for a different application",
 			"Confirm the client identifier in the selected context names the OAuth application this "+
 				"issuer signed you in to.")
+	case strings.Contains(reason, "issued by a different provider"):
+		// The issuer the token was meant to carry is not echoed: it is the
+		// context's, and the shell never repeats a configured issuer.
+		return notCompleted("the identity token this login returned was issued by a different issuer "+
+			"than the identity provider names",
+			"Confirm the issuer, and login.issuerId when the provider names an identifier other than "+
+				"its URL, in the selected context name the deployment that signed you in.")
 	case strings.Contains(reason, "failed to verify signature"):
 		return notCompleted("the identity token this login returned was not signed by the identity provider's keys",
 			"Retry wso2 login. If it keeps failing, confirm the issuer in the selected context is the "+

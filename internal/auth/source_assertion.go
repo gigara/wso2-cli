@@ -94,7 +94,7 @@ func (s assertionSource) derive(ctx context.Context, request Request, now time.T
 				"identity token, log in again, then retry the command.")
 	}
 
-	endpoint, err := tokenEndpoint(ctx, s.session.client, s.grant.Issuer)
+	endpoint, err := tokenEndpoint(ctx, s.session.client, s.grant.Issuer, "")
 	if err != nil {
 		return Grant{}, err
 	}

@@ -159,6 +159,13 @@ See [ADR 0005](adr/0005-audience-side-verification.md),
 [ADR 0014](adr/0014-one-login-one-session-per-product.md), and
 [ADR 0010](adr/0010-best-effort-revocation-on-session-end.md) for revocation.
 
+Discovery at the login issuer requires the provider to name `login.issuer` as
+its issuer, unless the context declares `login.issuerId`: then the provider
+must name exactly that identifier, and identity tokens are verified against
+it, while every endpoint must still be HTTPS and sessions stay bound to
+`login.issuer`. See
+[ADR 0020](adr/0020-a-declared-issuer-identifier-that-differs-from-the-discovery-url.md).
+
 Authentication kinds are `oauth-browser` (Authorization Code with PKCE),
 `oauth-device` (Device Authorization Grant, chosen with
 `ws context create --device`), and `client-credentials`, whose secret is

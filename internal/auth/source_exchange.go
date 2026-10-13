@@ -110,7 +110,7 @@ func (s exchangeSource) exchange(ctx context.Context, request Request, now time.
 	if err != nil {
 		return Grant{}, err
 	}
-	endpoint, err := tokenEndpoint(ctx, s.login.client, s.login.issuer)
+	endpoint, err := tokenEndpoint(ctx, s.login.client, s.login.issuer, s.login.issuerID)
 	if err != nil {
 		return Grant{}, err
 	}

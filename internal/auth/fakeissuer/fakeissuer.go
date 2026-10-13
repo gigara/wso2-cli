@@ -106,6 +106,20 @@ type Options struct {
 	// textual and looks for 127.0.0.1, so it does nothing for a test server
 	// bound to an IPv6 loopback address.
 	Host string
+	// IssuerIdentifier is the issuer this fake names when it is not its URL,
+	// such as "example-idp". When set it is the discovery document's issuer
+	// member and the iss of every token the fake mints and introspects, while
+	// every endpoint is still served from URL.
+	IssuerIdentifier string
+	// IDTokenIssuer overrides the iss minted into identity tokens alone,
+	// modelling a provider whose identity tokens name an issuer other than
+	// the one its discovery document does.
+	IDTokenIssuer string
+	// PlaintextEndpoint advertises the key set on a plain-HTTP host that is
+	// not loopback, modelling a deployment configured with an http:// public
+	// URL. The key set is never fetched from there; a client that accepts the
+	// document has already failed.
+	PlaintextEndpoint bool
 	// IssuerPath is appended to the server URL to name the issuer, as in
 	// "/oauth2/token" for Identity Server and Asgardeo, whose issuer is not
 	// the bare host. Every endpoint is served below it.
@@ -272,7 +286,8 @@ type Options struct {
 	BearerScopeMode string
 }
 
-// Issuer is one running fake issuer. Its URL doubles as the issuer identifier.
+// Issuer is one running fake issuer. Its URL doubles as the issuer identifier
+// unless Options.IssuerIdentifier names another.
 type Issuer struct {
 	URL string
 
@@ -456,9 +471,18 @@ func (i *Issuer) Introspect(t *testing.T, token string) (active bool, scopes, au
 	return report.Active, splitScopes(report.Scope), report.Audience
 }
 
+// Identifier is the issuer this fake names in its discovery document and its
+// tokens: Options.IssuerIdentifier when set, else its URL.
+func (i *Issuer) Identifier() string {
+	if i.opts.IssuerIdentifier != "" {
+		return i.opts.IssuerIdentifier
+	}
+	return i.URL
+}
+
 func (i *Issuer) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 	document := map[string]any{
-		"issuer":                                i.URL,
+		"issuer":                                i.Identifier(),
 		"authorization_endpoint":                i.URL + "/authorize",
 		"token_endpoint":                        i.URL + "/token",
 		"jwks_uri":                              i.URL + "/jwks",
@@ -479,6 +503,9 @@ func (i *Issuer) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 	}
 	if i.opts.OmitRevocationEndpoint {
 		delete(document, "revocation_endpoint")
+	}
+	if i.opts.PlaintextEndpoint {
+		document["jwks_uri"] = "http://keys.example.test/jwks"
 	}
 	if i.opts.OmitDeviceEndpoint {
 		// Both go, because a deployment without the grant advertises neither.
@@ -1311,7 +1338,7 @@ func (i *Issuer) handleIntrospect(w http.ResponseWriter, r *http.Request) {
 		"active": true,
 		"scope":  strings.Join(record.scopes, " "),
 		"sub":    record.subject,
-		"iss":    i.URL,
+		"iss":    i.Identifier(),
 	}
 	if record.audience != "" {
 		report["aud"] = []string{record.audience}
@@ -1332,7 +1359,7 @@ func (i *Issuer) mintAccessTokenFor(subject string, scopes []string, resource st
 	}
 	now := time.Now()
 	claims := map[string]any{
-		"iss":   i.URL,
+		"iss":   i.Identifier(),
 		"sub":   subject,
 		"aud":   audience,
 		"scope": strings.Join(scopes, " "),
@@ -1355,8 +1382,12 @@ func (i *Issuer) mintAccessTokenFor(subject string, scopes []string, resource st
 
 func (i *Issuer) mintIDToken(clientID, nonce string, scopes []string) string {
 	now := time.Now()
+	issuer := i.Identifier()
+	if i.opts.IDTokenIssuer != "" {
+		issuer = i.opts.IDTokenIssuer
+	}
 	claims := map[string]any{
-		"iss":   i.URL,
+		"iss":   issuer,
 		"sub":   "user-1",
 		"aud":   clientID,
 		"exp":   now.Add(5 * time.Minute).Unix(),

@@ -393,15 +393,16 @@ func issuerCheck(selected *contexts.Selection) (doctorFinding, *problem.Problem)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), onlineProbeTimeout)
 	defer cancel()
+	// Each issuer is probed once, with the identifier the access plan carries
+	// for it: the login's declared one at the login issuer, none elsewhere.
 	var issuers []string
 	for _, access := range append([]contexts.ProductAccess{selected.Identity.LoginAccess()},
 		selected.Identity.Accesses()...) {
-		if access.Issuer != "" && !slices.Contains(issuers, access.Issuer) {
-			issuers = append(issuers, access.Issuer)
+		if access.Issuer == "" || slices.Contains(issuers, access.Issuer) {
+			continue
 		}
-	}
-	for _, issuer := range issuers {
-		if err := auth.ProbeIssuer(ctx, http.DefaultClient, issuer); err != nil {
+		issuers = append(issuers, access.Issuer)
+		if err := auth.ProbeIssuer(ctx, http.DefaultClient, access.Issuer, access.IssuerID); err != nil {
 			typed := doctorProblem(err)
 			return failFinding(checkIssuer, typed), &typed
 		}

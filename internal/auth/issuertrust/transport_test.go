@@ -45,6 +45,25 @@ func TestPlaintextRefusesAnyDiscoveredEndpointOffLoopbackHTTP(t *testing.T) {
 	}
 }
 
+// For a declared issuer identifier the issuer member alone is exempt: it is
+// compared with the identifier instead, and every endpoint keeps the rule.
+func TestPlaintextEndpointsExemptsOnlyTheIssuerMember(t *testing.T) {
+	for document, want := range map[string]bool{
+		`{"issuer": "example-idp", "token_endpoint": "https://id.example.test/token"}`: false,
+		`{"issuer": "example-idp", "token_endpoint": "http://id.example.test/token"}`:  true,
+		`{"issuer": "example-idp", "jwks_uri": "http://id.example.test/jwks"}`:         true,
+	} {
+		claims := func(into any) error { return json.Unmarshal([]byte(document), into) }
+		if got := issuertrust.PlaintextEndpoints(claims); got != want {
+			t.Errorf("PlaintextEndpoints(%s) = %v, want %v", document, got, want)
+		}
+	}
+	claims := func(into any) error { return json.Unmarshal([]byte(`{"issuer": "example-idp"}`), into) }
+	if !issuertrust.Plaintext(claims) {
+		t.Error("Plaintext passed an issuer member that is no URL")
+	}
+}
+
 func TestSecureAllowsPlainHTTPOnlyOnLoopback(t *testing.T) {
 	for raw, want := range map[string]bool{
 		"https://login.example.test/oauth2/token": true,

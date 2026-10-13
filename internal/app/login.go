@@ -476,6 +476,7 @@ func (s Shell) establishSession(selected contexts.Selection, access contexts.Pro
 		// carry it too.
 		return oauthflow.DeviceLogin{
 			Issuer:   access.Issuer,
+			IssuerID: access.IssuerID,
 			ClientID: access.ClientID,
 			Scopes:   access.Scopes,
 			Out:      s.Streams.Err,
@@ -485,6 +486,7 @@ func (s Shell) establishSession(selected contexts.Selection, access contexts.Pro
 	defer cancel()
 	return oauthflow.Login{
 		Issuer:      access.Issuer,
+		IssuerID:    access.IssuerID,
 		ClientID:    access.ClientID,
 		Scopes:      access.Scopes,
 		Resource:    access.Resource,

@@ -95,7 +95,7 @@ func (s Shell) writeChange(root string, plan plannedChange) ([]endedSession, err
 	ended := map[string]bool{}
 	var report []endedSession
 	for _, access := range plan.ending {
-		outcome, err := s.endSession(store, access.SessionRef, access.Issuer, access.ClientID)
+		outcome, err := s.endSession(store, access)
 		if err != nil {
 			return report, err
 		}

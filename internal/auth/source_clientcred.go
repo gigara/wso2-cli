@@ -51,6 +51,9 @@ type clientCredentialsSource struct {
 	// issuer is where the grant is presented: the account's own issuer, or
 	// the product's own issuer when the product is reached through a grant.
 	issuer string
+	// issuerID is the issuer identifier the account declares its issuer
+	// names, empty when it names itself or issuer is a grant's own.
+	issuerID string
 	// clientID is the OAuth client presented at issuer: the account's own,
 	// or the product's own when the product records a credential of its own.
 	clientID string
@@ -76,7 +79,7 @@ type clientCredentialsSource struct {
 func (s clientCredentialsSource) mint(request Request, now time.Time) (Grant, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), grantDeadline)
 	defer cancel()
-	endpoint, err := tokenEndpoint(ctx, s.client, s.issuer)
+	endpoint, err := tokenEndpoint(ctx, s.client, s.issuer, s.issuerID)
 	if err != nil {
 		return Grant{}, err
 	}

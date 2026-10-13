@@ -205,10 +205,12 @@ func TestAContextRecordsNoCredentialValue(t *testing.T) {
 	// types rather than from every writer of them.
 	allowedContext := []string{"name", "type", "credentialRef", "login", "organization", "project", "products"}
 	// provider and narrowing say which deployment this is and how access is
-	// derived from it, and product names which product the login is run for.
-	// All are names of behaviour, not locations of secrets.
+	// derived from it, product names which product the login is run for, and
+	// issuerId the identifier the provider names. All are names of behaviour,
+	// not locations of secrets.
 	allowedLogin := []string{
-		"kind", "issuer", "clientId", "tenant", "provider", "narrowing", "clientSecretVariable", "product",
+		"kind", "issuer", "issuerId", "clientId", "tenant", "provider", "narrowing", "clientSecretVariable",
+		"product",
 	}
 	// grant says where a product's access is derived and which public client
 	// asks for it: an issuer, a client identifier and scope names, no secret.

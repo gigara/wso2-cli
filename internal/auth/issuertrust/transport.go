@@ -59,11 +59,8 @@ func loopback(host string) bool {
 }
 
 // discoveredEndpoints are the members of an OpenID configuration the shell
-// may follow. The issuer member is among them: go-oidc proves it equals the
-// URL the document was fetched from, and checking it here keeps an issuer that
-// reached discovery without passing through context validation to the rule.
+// may follow.
 var discoveredEndpoints = []string{
-	"issuer",
 	"authorization_endpoint",
 	"token_endpoint",
 	"device_authorization_endpoint",
@@ -80,12 +77,28 @@ var discoveredEndpoints = []string{
 // so this package, which context validation also imports, carries no HTTP
 // client. An endpoint that is absent is not a refusal; one that is present and
 // cannot be read is.
+//
+// The issuer member is checked too: go-oidc proves it equals the URL the
+// document was fetched from, and checking it here keeps an issuer that reached
+// discovery without passing through context validation to the rule.
 func Plaintext(claims func(any) error) bool {
+	return plaintext(claims, append([]string{"issuer"}, discoveredEndpoints...))
+}
+
+// PlaintextEndpoints is Plaintext for a provider whose context declares an
+// issuer identifier (ADR 0020). Its issuer member is that identifier rather
+// than a URL, and discovery compares it with the declared one, so only the
+// endpoints are checked here.
+func PlaintextEndpoints(claims func(any) error) bool {
+	return plaintext(claims, discoveredEndpoints)
+}
+
+func plaintext(claims func(any) error, members []string) bool {
 	var advertised map[string]any
 	if claims(&advertised) != nil {
 		return true
 	}
-	for _, member := range discoveredEndpoints {
+	for _, member := range members {
 		value, present := advertised[member]
 		if !present {
 			continue

@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -155,8 +156,15 @@ type Login struct {
 	// Kind identifies how the shell obtains access: KindOAuthBrowser,
 	// KindOAuthDevice, KindClientCredentials or KindPAT.
 	Kind string `json:"kind"`
-	// Issuer is the token issuer the shell authenticates against.
+	// Issuer is the token issuer the shell authenticates against: the URL
+	// its OpenID configuration is read from, and what sessions are bound to.
 	Issuer string `json:"issuer,omitempty"`
+	// IssuerID is the issuer identifier the provider names in its OpenID
+	// configuration and its tokens, declared only when that is not Issuer
+	// itself, for a provider served from a URL that names a bare identifier
+	// such as "example-idp". Empty means the identifier is Issuer, as OpenID
+	// Connect Discovery requires.
+	IssuerID string `json:"issuerId,omitempty"`
 	// ClientID is the OAuth client this shell presents itself as.
 	ClientID string `json:"clientId,omitempty"`
 	// Tenant is the context's home tenant, when the issuer is multi-tenant.
@@ -217,6 +225,9 @@ type AccountAuth struct {
 	ClientSecretVariable string `json:"clientSecretVariable,omitempty"`
 	Provider             string `json:"provider,omitempty"`
 	Narrowing            string `json:"narrowing,omitempty"`
+	// IssuerID is the login block's issuerId. Schema version 3 has no such
+	// member, so it is never decoded from or encoded into one.
+	IssuerID string `json:"-"`
 	// CredentialVariable exists only on synthetic v1 contexts. Never encoded.
 	CredentialVariable string `json:"-"`
 }
@@ -235,6 +246,7 @@ func (c Context) Account() Account {
 			ClientSecretVariable: c.Login.ClientSecretVariable,
 			Provider:             c.Login.Provider,
 			Narrowing:            c.Login.Narrowing,
+			IssuerID:             c.Login.IssuerID,
 			CredentialVariable:   c.credentialVariable,
 		},
 		Products:     c.Products,
@@ -255,6 +267,7 @@ func FromAccount(name string, account Account) Context {
 			Kind: account.Auth.Kind, Issuer: account.Auth.Issuer, ClientID: account.Auth.ClientID,
 			Tenant: account.Auth.Tenant, Provider: account.Auth.Provider, Narrowing: account.Auth.Narrowing,
 			ClientSecretVariable: account.Auth.ClientSecretVariable, Product: account.LoginProduct,
+			IssuerID: account.Auth.IssuerID,
 		},
 		Products: account.Products,
 	}
@@ -352,10 +365,55 @@ func decodeCurrent(data []byte) (Document, error) {
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return Document{}, malformed("contains more than one JSON document")
 	}
+	if refusal := IssuerIDMemberRefusal(data); refusal != "" {
+		return Document{}, malformed(refusal)
+	}
 	if err := document.validate(); err != nil {
 		return Document{}, err
 	}
 	return document, nil
+}
+
+// IssuerIDMemberRefusal names the issuerId member a decoded document cannot
+// show, given the document or an input file as JSON, and is empty when there
+// is none: an empty one on a login, which decodes the same as none, and any on
+// a product grant, whose issuer has no declared identifier and where the
+// member would otherwise be ignored. Both would leave the person believing
+// they had declared something. It is exported for wso2 context apply, which
+// refuses an input file with the same words before its strict decode would
+// report the grant's member as merely unknown; each reader wraps it in its
+// own problem.
+func IssuerIDMemberRefusal(data []byte) string {
+	var probe struct {
+		Contexts []struct {
+			Name  string `json:"name"`
+			Login struct {
+				IssuerID *string `json:"issuerId"`
+			} `json:"login"`
+			Products map[string]struct {
+				Grant *struct {
+					IssuerID *string `json:"issuerId"`
+				} `json:"grant"`
+			} `json:"products"`
+		} `json:"contexts"`
+	}
+	if json.Unmarshal(data, &probe) != nil {
+		// The full decode reports a document of the wrong shape.
+		return ""
+	}
+	for _, context := range probe.Contexts {
+		if declared := context.Login.IssuerID; declared != nil && *declared == "" {
+			return fmt.Sprintf("gives the context %q an empty issuer identifier (login.issuerId); leave "+
+				"the member out when the provider names its issuer URL", context.Name)
+		}
+		for _, namespace := range slices.Sorted(maps.Keys(context.Products)) {
+			if grant := context.Products[namespace].Grant; grant != nil && grant.IssuerID != nil {
+				return fmt.Sprintf("gives the %q product's grant on the context %q an issuer identifier "+
+					"(issuerId), and only the login's issuer may declare one", namespace, context.Name)
+			}
+		}
+	}
+	return ""
 }
 
 // Encode renders the document as the canonical on-disk form, YAML, refusing a

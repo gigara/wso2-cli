@@ -1,6 +1,9 @@
 # ADR 0005: Audience-Side Verification of Brokered Access
 
-**Status:** Accepted
+**Status:** Accepted; amended by
+[ADR 0020](0020-a-declared-issuer-identifier-that-differs-from-the-discovery-url.md),
+which lets a context declare the issuer identifier its provider names when that
+is not the discovery URL
 
 An audience receiving brokered access establishes trust for itself rather than
 inheriting the shell's. It verifies an issuer-minted token's signature against

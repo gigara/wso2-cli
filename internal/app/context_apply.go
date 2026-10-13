@@ -182,6 +182,11 @@ func decodeInputFile(data []byte) (inputFile, error) {
 					"assigns one to a new context. wso2 context export writes files without it.")
 		}
 	}
+	// Before the strict decode, which would report an issuerId on a grant as
+	// merely unknown and cannot see an empty one on a login at all.
+	if refusal := contexts.IssuerIDMemberRefusal(data); refusal != "" {
+		return inputFile{}, inputProblem(refusal)
+	}
 	var file inputFile
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()

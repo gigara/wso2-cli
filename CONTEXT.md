@@ -162,6 +162,14 @@ The product a context logs in through, written into the context's login block
 context that logs in through a bare issuer has none.
 _Avoid_: Default product, primary product
 
+**Issuer identifier**:
+The issuer a context's identity provider names in its OpenID configuration and
+its tokens (`login.issuerId`), declared only for a provider whose identifier
+is not the URL its configuration is read from (`login.issuer`). It is what
+discovery and the identity token are checked against; sessions stay bound to
+the URL (ADR 0020).
+_Avoid_: Issuer alias, issuer name, discovery URL
+
 **Acquisition strategy**:
 How one product's access is obtained for a context: direct, sibling,
 exchanged, derived, federated, or inline. It follows from what the context
