@@ -57,7 +57,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.9'
           cache-dependency-path: |
             go.mod
             sdk/go.mod
@@ -180,16 +180,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.9'
           cache-dependency-path: |
             go.mod
             sdk/go.mod
 
-      # govulncheck v1.8.0 needs Go 1.26 to build. Only the build uses that
-      # toolchain; the scans below run on the Go the project declares.
       - name: Install govulncheck
-        env:
-          GOTOOLCHAIN: go1.26.4
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
       - name: Scan the shell
@@ -234,7 +230,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.9'
           cache-dependency-path: |
             go.mod
             sdk/go.mod
@@ -258,7 +254,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.9'
           cache-dependency-path: |
             go.mod
             sdk/go.mod
@@ -295,7 +291,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.9'
           cache-dependency-path: |
             go.mod
             sdk/go.mod

@@ -69,7 +69,7 @@ requests and weekly. To reproduce a finding locally, install
 `govulncheck` and run:
 
 ```shell
-GOTOOLCHAIN=go1.26.4 go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 ```
 
 Then run:

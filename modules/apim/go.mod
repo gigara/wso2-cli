@@ -1,6 +1,6 @@
 module github.com/wso2/wso2-cli/modules/apim
 
-go 1.25.0
+go 1.26.9
 
 require (
 	github.com/spf13/cobra v1.10.2
