@@ -37,7 +37,7 @@ import (
 const (
 	contextCreateUsage = "Run wso2 context create <name> --login-product <product> --url <url> " +
 		"[--client-id <id>] [--provider <name>] [--use], or wso2 context create <name> " +
-		"--issuer <url> --client-id <id> [--provider <name>] [--use]."
+		"--issuer <url> --client-id <id> [--issuer-id <id>] [--provider <name>] [--use]."
 	contextUseUsage     = "Run wso2 context use <name>."
 	contextListUsage    = "Run wso2 context list [--output table|json]."
 	contextCurrentUsage = "Run wso2 context current [--output table|json]."

@@ -26,7 +26,7 @@ import (
 	oidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/wso2/wso2-cli/internal/auth/issuertrust"
+	"github.com/wso2/wso2-cli/internal/auth/oidcdiscovery"
 	"github.com/wso2/wso2-cli/internal/output"
 )
 
@@ -45,6 +45,9 @@ import (
 type DeviceLogin struct {
 	// Issuer is the OpenID provider to discover and authenticate against.
 	Issuer string
+	// IssuerID is the issuer identifier the context declares the provider
+	// names, as on Login.
+	IssuerID string
 	// ClientID is the public OAuth client this shell presents itself as. As in
 	// the browser login there is no client secret; here the device code is what
 	// binds the eventual token to the request this process made.
@@ -76,17 +79,9 @@ type DeviceLogin struct {
 // a typed problem that never repeats the deployment's own words.
 func (d DeviceLogin) Run(ctx context.Context) (Result, error) {
 	ctx = oidc.ClientContext(ctx, d.httpClient())
-	provider, err := oidc.NewProvider(ctx, d.Issuer)
+	provider, err := oidcdiscovery.Discover(ctx, d.Issuer, d.IssuerID)
 	if err != nil {
-		if issuertrust.Untrusted(err) {
-			return Result{}, issuertrust.Problem(d.Issuer)
-		}
-		return Result{}, discoveryFailed(
-			"the shell could not read the identity provider's OpenID configuration",
-			"Check the issuer of the selected context and that this machine can reach it, then retry.")
-	}
-	if issuertrust.Plaintext(provider.Claims) {
-		return Result{}, issuertrust.PlaintextProblem()
+		return Result{}, err
 	}
 
 	endpoint := provider.Endpoint()
@@ -95,7 +90,7 @@ func (d DeviceLogin) Run(ctx context.Context) (Result, error) {
 	// grant would otherwise leave a user reading out a code towards an approval
 	// screen that does not exist, and blaming themselves for it.
 	if endpoint.DeviceAuthURL == "" {
-		return Result{}, discoveryFailed(
+		return Result{}, oidcdiscovery.Failed(
 			"the identity provider does not advertise the device authorization grant",
 			"Enable the device authorization grant on the registered OAuth application, or select a "+
 				"context that logs in through the browser. Not every deployment offers this "+

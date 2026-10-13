@@ -102,6 +102,7 @@ authorize.
 | `contexts[].credentialRef` | The name this context's sessions are stored under in the OS secure store: the login session under the reference, and each product's own under `<ref>.<product>`. **Required** for `oauth-browser`, `oauth-device` and `pat`; **not allowed** for `client-credentials`. Unique across the document; it stays when the context is renamed, so no session moves. |
 | `login.kind` | `oauth-browser` for a person at a browser, `oauth-device` for a context that can only be established without one, `client-credentials` for CI. `pat` is named by the schema but not implemented in this release. |
 | `login.issuer` | The issuer, verbatim from its discovery document. Must be `https`; plain `http` is accepted only on a loopback host (`localhost`, `127.0.0.0/8`, `::1`), because the shell sends credentials to it. The same rule applies to a grant's own issuer and to every endpoint the issuer's discovery document names — a plaintext one is refused as `auth.discovery_failed`. |
+| `login.issuerId` | The issuer identifier the provider names in its discovery document and its tokens, when that is not `login.issuer`, such as `example-idp`. Optional; absent means the provider names `login.issuer`, which is the rule. `login.issuer` stays the URL the configuration is read from and what sessions are bound to. Allowed on `oauth-browser`, `oauth-device` and `client-credentials` logins only, and never on a product grant. Refused when empty, when it contains whitespace, or when it equals `login.issuer` (a trailing `/` aside); one that is an `http` or `https` URL follows `login.issuer`'s `https`-or-loopback rule, while a URN or any other scheme is taken as an identifier. See [A provider that names another issuer](#a-provider-that-names-another-issuer). |
 | `login.clientId` | The registered public client. |
 | `login.tenant` | The home tenant the login belongs to at the issuer; derived from an Asgardeo issuer when absent. Not the same as `organization`, which is what commands target. |
 | `login.provider` | Names the product when the shell must ask it for tokens in a product-specific shape: `asgardeo`, `identity-server` or `thunder`. Required for Thunder. |
@@ -172,6 +173,36 @@ Nothing is derived here, so both members are stated directly. You may also
 state `issuer` or `clientId` next to `login.product`; what you state wins over
 what the descriptor would fill in.
 
+### A provider that names another issuer
+
+OpenID Connect Discovery requires a provider to name the URL it is served from
+as its issuer, and the shell refuses one that does not. Some providers are
+served from a URL and name a bare identifier instead, often because other
+relying parties already trust that identifier verbatim. Declare it as
+`login.issuerId`:
+
+```yaml
+contexts:
+  - name: example-dev
+    login:
+      kind: oauth-browser
+      issuer: https://idp.example.com
+      issuerId: example-idp
+      clientId: wso2-cli
+```
+
+`issuer` is still where the shell reads the provider's configuration, and what
+the context's sessions are bound to. The provider must name exactly `issuerId`,
+and every identity token it issues must carry it as `iss`. Only the identifier
+may differ: every endpoint the configuration names must still be `https`, and
+tokens are still verified against the provider's published keys
+(ADR 0020). `ws context create <name> --issuer <url> --issuer-id <id>
+--client-id <id>` writes the same login.
+
+A provider that names another issuer when the context declares none, or a
+different one, is refused with `auth.discovery_failed`, quoting the issuer the
+provider names; set `login.issuerId` to it if that is expected.
+
 ## What apply does
 
 1. Reads the whole file and refuses it as a whole before it installs anything.
@@ -232,6 +263,8 @@ Apply refuses the whole file and writes nothing. The message names the cause:
 | `logs the context "x" in through the "y" product, which it does not list under products` | `login.product` names a namespace with no `products` entry |
 | `gives the context "x" neither a login product nor an issuer and client id` | no way to log in |
 | `a product url on the context "x" is not served over HTTPS` (or `a product gateway url on the context "x" …`) | a product or gateway `url` in plain `http` on a host that is not loopback |
+| `gives the context "x" an empty issuer identifier (login.issuerId)` | `issuerId: ""`; leave the member out instead |
+| `gives the "y" product's grant on the context "x" an issuer identifier (issuerId)` | `issuerId` on a product grant, whose own issuer has no declared identifier |
 | `json: unknown field "logn"` | a misspelled or unsupported member |
 
 With `--no-install`, a login product that is not installed must also state

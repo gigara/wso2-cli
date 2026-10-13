@@ -59,6 +59,10 @@ type sessionSource struct {
 	ref string
 	// issuer and clientID are where and as whom the session is renewed.
 	issuer, clientID string
+	// issuerID is the issuer identifier the login declares the provider at
+	// issuer names, empty when it names issuer itself. Discovery is held to
+	// it; the stored session stays bound to issuer.
+	issuerID string
 	// audience is the concrete audience the identity registers for this
 	// namespace, and the one an issued token is proved to be bound to.
 	audience string
@@ -389,7 +393,7 @@ func (s sessionSource) renew(ctx context.Context, scopes []string, now time.Time
 				"authorize every product.", s.product))
 	}
 
-	endpoint, err := tokenEndpoint(ctx, s.client, s.issuer)
+	endpoint, err := tokenEndpoint(ctx, s.client, s.issuer, s.issuerID)
 	if err != nil {
 		return tokenResponse{}, err
 	}

@@ -23,7 +23,7 @@ import (
 
 	oidc "github.com/coreos/go-oidc/v3/oidc"
 
-	"github.com/wso2/wso2-cli/internal/auth/issuertrust"
+	"github.com/wso2/wso2-cli/internal/auth/oidcdiscovery"
 	"github.com/wso2/wso2-cli/internal/auth/trustedhttp"
 )
 
@@ -33,6 +33,9 @@ type EndSession struct {
 	// Issuer is the OpenID provider whose end-session endpoint is read from
 	// discovery.
 	Issuer string
+	// IssuerID is the issuer identifier the context declares the provider
+	// names, as on Login.
+	IssuerID string
 	// ClientID names the application the session was established for. Every
 	// provider measured wants it: ThunderID refuses a request naming neither
 	// a client nor a token, and API Manager shows a consent page without a
@@ -54,17 +57,9 @@ type EndSession struct {
 // for a tab the user did not ask to keep.
 func (e EndSession) URL(ctx context.Context) (string, error) {
 	client := trustedhttp.Client(e.HTTPClient)
-	provider, err := oidc.NewProvider(oidc.ClientContext(ctx, client), e.Issuer)
+	provider, err := oidcdiscovery.Discover(oidc.ClientContext(ctx, client), e.Issuer, e.IssuerID)
 	if err != nil {
-		if issuertrust.Untrusted(err) {
-			return "", issuertrust.Problem(e.Issuer)
-		}
-		return "", discoveryFailed(
-			"the shell could not read the identity provider's OpenID configuration",
-			"Check the issuer of the selected context and that this machine can reach it, then retry.")
-	}
-	if issuertrust.Plaintext(provider.Claims) {
-		return "", issuertrust.PlaintextProblem()
+		return "", err
 	}
 	var advertised struct {
 		EndSessionEndpoint string `json:"end_session_endpoint"`

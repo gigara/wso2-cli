@@ -24,7 +24,7 @@ import (
 
 	oidc "github.com/coreos/go-oidc/v3/oidc"
 
-	"github.com/wso2/wso2-cli/internal/auth/issuertrust"
+	"github.com/wso2/wso2-cli/internal/auth/oidcdiscovery"
 	"github.com/wso2/wso2-cli/internal/auth/trustedhttp"
 )
 
@@ -62,6 +62,9 @@ type Revoke struct {
 	// the same reason the token endpoint is: the shell reads the deployment's
 	// own configuration instead of assuming a URL shape.
 	Issuer string
+	// IssuerID is the issuer identifier the context declares the provider
+	// names, as on Login.
+	IssuerID string
 	// ClientID is the public OAuth client this shell presents itself as. There
 	// is deliberately no client secret, which is also the most likely reason a
 	// deployment refuses: RFC 7009 leaves client authentication to the
@@ -92,18 +95,15 @@ func (r Revoke) Run(ctx context.Context) Revocation {
 		return RevocationNotAttempted
 	}
 	client := trustedhttp.Client(r.HTTPClient)
-	provider, err := oidc.NewProvider(oidc.ClientContext(ctx, client), r.Issuer)
+	provider, err := oidcdiscovery.Discover(oidc.ClientContext(ctx, client), r.Issuer, r.IssuerID)
 	if err != nil {
 		// Discovery is how the endpoint is found, so an issuer that cannot be
 		// read is an issuer that cannot be told. This is a failure and not an
 		// unsupported deployment: the shell learned nothing either way, and
 		// reporting "publishes no revocation endpoint" would state a fact about
-		// a document it never read.
-		return RevocationFailed
-	}
-	// A revocation carries the refresh token, so an endpoint the shell may
-	// not speak to is a revocation it cannot make.
-	if issuertrust.Plaintext(provider.Claims) {
+		// a document it never read. A configuration naming an endpoint the
+		// shell may not speak to is refused here too, because a revocation
+		// carries the refresh token.
 		return RevocationFailed
 	}
 	var advertised struct {

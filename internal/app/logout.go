@@ -114,7 +114,7 @@ func (s Shell) logout(flags logoutFlags) error {
 		"issuer", login.Issuer,
 		"client_id", login.ClientID,
 		"credential_ref", login.SessionRef)
-	loginOutcome, err := s.endSession(store, login.SessionRef, login.Issuer, login.ClientID)
+	loginOutcome, err := s.endSession(store, login)
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,9 @@ func (s Shell) logout(flags logoutFlags) error {
 		}
 		key := access.Issuer + " " + access.ClientID
 		if _, seen := signOuts[key]; !seen {
-			signOuts[key] = oauthflow.EndSession{Issuer: access.Issuer, ClientID: access.ClientID, IDToken: outcome.idToken}
+			signOuts[key] = oauthflow.EndSession{
+				Issuer: access.Issuer, IssuerID: access.IssuerID, ClientID: access.ClientID, IDToken: outcome.idToken,
+			}
 		}
 	}
 	noteSignOut(login, loginOutcome)
@@ -146,7 +148,7 @@ func (s Shell) logout(flags logoutFlags) error {
 			"issuer", access.Issuer,
 			"client_id", access.ClientID,
 			"credential_ref", access.SessionRef)
-		outcome, err := s.endSession(store, access.SessionRef, access.Issuer, access.ClientID)
+		outcome, err := s.endSession(store, access)
 		if err != nil {
 			return err
 		}
@@ -244,7 +246,8 @@ type sessionEndOutcome struct {
 	idToken string
 }
 
-// endSession revokes and deletes one session reference against one issuer.
+// endSession revokes and deletes the session access stores, against the issuer
+// access names.
 //
 // The whole of it runs inside the store's own per-reference lock: the refresh
 // token has to be read before it can be revoked and before the entry can go,
@@ -253,7 +256,8 @@ type sessionEndOutcome struct {
 // the user had just established. logout calls this once per session it ends,
 // so each session's read, revoke, and delete stay under its own lock rather
 // than one lock shared across every session of the identity.
-func (s Shell) endSession(store session.Store, sessionRef, issuer, clientID string) (sessionEndOutcome, error) {
+func (s Shell) endSession(store session.Store, access contexts.ProductAccess) (sessionEndOutcome, error) {
+	sessionRef := access.SessionRef
 	outcome := sessionEndOutcome{revocation: oauthflow.RevocationNotAttempted}
 	var refreshToken string
 	err := store.WithLock(sessionRef, func() error {
@@ -277,8 +281,9 @@ func (s Shell) endSession(store session.Store, sessionRef, issuer, clientID stri
 			ctx, cancel := context.WithTimeout(context.Background(), revokeDeadline)
 			defer cancel()
 			outcome.revocation = oauthflow.Revoke{
-				Issuer:       issuer,
-				ClientID:     clientID,
+				Issuer:       access.Issuer,
+				IssuerID:     access.IssuerID,
+				ClientID:     access.ClientID,
 				RefreshToken: refreshToken,
 			}.Run(ctx)
 		}

@@ -33,6 +33,8 @@ import (
 type contextCreateFlags struct {
 	loginProduct, url          string
 	issuer, clientID, provider string
+	issuerID                   string
+	issuerIDSet                bool
 	audience                   string
 	scopes                     []string
 	scopesSet                  bool
@@ -61,6 +63,7 @@ func (s Shell) contextCreateCommand() *cobra.Command {
 		Args: atMostOneArgument(contextCreateUsage),
 		RunE: func(command *cobra.Command, args []string) error {
 			flags.scopesSet = command.Flags().Changed("scopes")
+			flags.issuerIDSet = command.Flags().Changed("issuer-id")
 			name := ""
 			if len(args) == 1 {
 				name = args[0]
@@ -83,6 +86,8 @@ func (s Shell) contextCreateCommand() *cobra.Command {
 		"The product the context logs in through: the installed login product, or iam, by default.")
 	f.StringVar(&flags.url, "url", "", "The login product's URL.")
 	f.StringVar(&flags.issuer, "issuer", "", "The OpenID issuer to log in through, without a login product.")
+	f.StringVar(&flags.issuerID, "issuer-id", "",
+		"The issuer identifier the provider names, with --issuer, when it is not the issuer URL.")
 	f.StringVar(&flags.clientID, "client-id", "",
 		"The OAuth client the shell presents: required with --issuer, the descriptor's by default otherwise.")
 	f.StringVar(&flags.provider, "provider", "",
@@ -169,6 +174,7 @@ func (s Shell) contextCreate(command *cobra.Command, name string, flags contextC
 			return err
 		}
 		login.Issuer = strings.TrimRight(flags.issuer, "/")
+		login.IssuerID = flags.issuerID
 		if login.Provider == contexts.ProviderThunder {
 			return problem.New(problem.CategoryUsage, "shell.conflicting_arguments",
 				"a thunder deployment binds every login to a product, and --issuer creates a context "+
@@ -301,6 +307,15 @@ func checkContextCreateFlags(name string, flags contextCreateFlags) error {
 			"--audience and --scopes describe a login product, and --issuer logs in without one").
 			WithRecovery("Add products with wso2 context product add once the context exists. " +
 				contextCreateUsage)
+	case flags.issuerIDSet && flags.issuer == "":
+		return problem.New(problem.CategoryUsage, "shell.conflicting_arguments",
+			"--issuer-id names the identifier of the issuer --issuer gives, and --issuer is not given").
+			WithRecovery("A login product's descriptor states its own issuer. " + contextCreateUsage)
+	case flags.issuerIDSet && flags.issuerID == "":
+		return problem.New(problem.CategoryUsage, "shell.invalid_argument",
+			"--issuer-id is empty").
+			WithRecovery("Pass the issuer the provider's OpenID configuration names, or leave --issuer-id out " +
+				"when that is the issuer URL itself.")
 	case flags.device && flags.clientSecretVariable != "":
 		return problem.New(problem.CategoryUsage, "shell.conflicting_arguments",
 			"--device and --client-secret-variable are two different ways to log in; pass one").

@@ -46,9 +46,14 @@ const (
 // ProductAccess is how one product under an identity is reached. Everything
 // in it is public configuration; nothing is a credential.
 type ProductAccess struct {
-	Namespace  string
-	Strategy   string
-	Issuer     string
+	Namespace string
+	Strategy  string
+	Issuer    string
+	// IssuerID is the identifier the provider at Issuer names, when the
+	// login declares one that is not Issuer. atLoginIssuer decides it for
+	// every access LoginAccess and Access return: the login's while Issuer is
+	// the login issuer, none at a product grant's own issuer.
+	IssuerID   string
 	ClientID   string
 	Scopes     []string
 	Resource   string
@@ -67,9 +72,24 @@ func ProductSessionRef(credentialRef, namespace string) string {
 // product, else the first direct product by namespace, else a bare session
 // when the identity records no direct product.
 func (i Account) LoginAccess() ProductAccess {
+	return i.atLoginIssuer(i.loginAccess())
+}
+
+// atLoginIssuer is access with the login's declared issuer identifier when it
+// is reached at the login issuer, and with none otherwise. It is the one place
+// IssuerID is decided, so no strategy can set it wrongly or forget it.
+func (i Account) atLoginIssuer(access ProductAccess) ProductAccess {
+	access.IssuerID = ""
+	if access.Issuer != "" && access.Issuer == i.Auth.Issuer {
+		access.IssuerID = i.Auth.IssuerID
+	}
+	return access
+}
+
+func (i Account) loginAccess() ProductAccess {
 	access := ProductAccess{
-		Strategy: StrategyDirect, Issuer: i.Auth.Issuer, ClientID: i.Auth.ClientID,
-		SessionRef: i.Auth.CredentialRef,
+		Strategy: StrategyDirect, Issuer: i.Auth.Issuer,
+		ClientID: i.Auth.ClientID, SessionRef: i.Auth.CredentialRef,
 	}
 	candidates := slices.Sorted(maps.Keys(i.Products))
 	if pinned, recorded := i.Products[i.LoginProduct]; recorded && pinned.Direct() {
@@ -95,6 +115,11 @@ func (i Account) LoginAccess() ProductAccess {
 // The name is a product namespace, or a gateway key (GatewayKey) for the
 // product's gateway record.
 func (i Account) Access(namespace string) (ProductAccess, bool) {
+	access, recorded := i.access(namespace)
+	return i.atLoginIssuer(access), recorded
+}
+
+func (i Account) access(namespace string) (ProductAccess, bool) {
 	if product, found := SplitGatewayKey(namespace); found {
 		return i.gatewayAccess(product)
 	}
@@ -105,7 +130,7 @@ func (i Account) Access(namespace string) (ProductAccess, bool) {
 	if i.Auth.Kind == KindClientCredentials {
 		return i.inlineAccess(namespace, product), true
 	}
-	login := i.LoginAccess()
+	login := i.loginAccess()
 	access := ProductAccess{
 		Namespace: namespace, Issuer: i.Auth.Issuer, ClientID: i.Auth.ClientID,
 		Audience: product.Audience, SessionRef: ProductSessionRef(i.Auth.CredentialRef, namespace),
@@ -184,7 +209,7 @@ func (i Account) gatewayAccess(namespace string) (ProductAccess, bool) {
 		access.SessionRef = ""
 		return access, true
 	}
-	login := i.LoginAccess()
+	login := i.loginAccess()
 	access.SessionRef = ProductSessionRef(i.Auth.CredentialRef, key)
 	access.Strategy = StrategySibling
 	if slices.Equal(access.Scopes, login.Scopes) && access.Resource == login.Resource {

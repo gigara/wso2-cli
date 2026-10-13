@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/wso2/wso2-cli/internal/auth/issuertrust"
 )
@@ -125,9 +126,10 @@ func Providers() []string {
 // deployment kind — a login against Asgardeo must not record WSO2's own cloud
 // as an on-premises deployment.
 //
-// Asgardeo issuers live on api.asgardeo.io, the one cloud host this
-// repository's guides and research name; the whole asgardeo.io zone is
-// recognized so a regional or future Asgardeo host is described the same way.
+// Two zones are WSO2-operated clouds: asgardeo.io, where Asgardeo issuers live
+// on api.asgardeo.io, and cloud.wso2.com, where WSO2 Cloud serves its identity
+// provider per environment. Each whole zone is recognized so a regional,
+// per-environment or future host is described the same way.
 // A URL that does not parse yields TypeOnprem — the open-world default — but
 // login refuses such a URL before this question is ever asked.
 func IdentityTypeForIssuer(issuer string) string {
@@ -135,10 +137,16 @@ func IdentityTypeForIssuer(issuer string) string {
 	if err != nil {
 		return TypeOnprem
 	}
-	if asgardeoHost(parsed.Hostname()) {
+	if host := parsed.Hostname(); asgardeoHost(host) || wso2CloudHost(host) {
 		return TypeCloud
 	}
 	return TypeOnprem
+}
+
+// wso2CloudHost reports whether a host lies in the cloud.wso2.com zone, with
+// one terminal DNS root dot trimmed as asgardeoHost does.
+func wso2CloudHost(host string) bool {
+	return inZone(host, "cloud.wso2.com")
 }
 
 // asgardeoHost reports whether a host lies in the asgardeo.io zone. It is the
@@ -150,8 +158,14 @@ func IdentityTypeForIssuer(issuer string) string {
 // an issuer a user wrote in the fully-qualified form would be recorded as
 // self-hosted (review on #161).
 func asgardeoHost(host string) bool {
+	return inZone(host, "asgardeo.io")
+}
+
+// inZone reports whether a host is zone itself or a name below it, compared
+// case-insensitively with one terminal DNS root dot trimmed.
+func inZone(host, zone string) bool {
 	host = strings.TrimSuffix(strings.ToLower(host), ".")
-	return host == "asgardeo.io" || strings.HasSuffix(host, ".asgardeo.io")
+	return host == zone || strings.HasSuffix(host, "."+zone)
 }
 
 // asgardeoTenantPath matches the tenant-qualified path an Asgardeo issuer
@@ -543,7 +557,57 @@ func (a AccountAuth) validate(identity string) error {
 			return plaintextIssuer(fmt.Sprintf("the issuer for the %s", identity))
 		}
 	}
+	return a.validateIssuerID(identity)
+}
+
+// validateIssuerID refuses an issuer identifier the shell would not hold a
+// provider to. It is declared only for a provider that names something other
+// than its URL (ADR 0020), so one that is the issuer itself is a mistake
+// rather than a no-op, and one that is an http or https URL keeps the issuer's
+// transport rule. The identifier is never echoed, like every configured issuer.
+//
+// An empty issuerId member decodes the same as none; refuseIssuerIDMembers
+// refuses that one, for both readers, before it reaches here.
+func (a AccountAuth) validateIssuerID(identity string) error {
+	if a.IssuerID == "" {
+		return nil
+	}
+	if a.Kind != KindOAuthBrowser && a.Kind != KindOAuthDevice && a.Kind != KindClientCredentials {
+		return issuerIDProblem(fmt.Sprintf("the %s declares an issuer identifier, and its kind logs in "+
+			"through no issuer", identity), "Remove login.issuerId.")
+	}
+	if strings.ContainsFunc(a.IssuerID, unicode.IsSpace) {
+		return issuerIDProblem(fmt.Sprintf("the issuer identifier for the %s contains whitespace", identity),
+			"Set login.issuerId to the issuer exactly as the provider's OpenID configuration names it.")
+	}
+	// Compared as the issuer is written: wso2 context create trims a trailing
+	// slash from it, and go-oidc reads the configuration from the same URL with
+	// or without one.
+	if strings.TrimRight(a.IssuerID, "/") == strings.TrimRight(a.Issuer, "/") {
+		return issuerIDProblem(fmt.Sprintf("the issuer identifier for the %s is its issuer", identity),
+			"Remove login.issuerId. It is only for a provider that names an issuer other than the URL "+
+				"its configuration is read from.")
+	}
+	// Only an http or https identifier is a URL a credential could be sent to;
+	// a URN or any other scheme is an identifier and nothing more.
+	parsed, err := url.Parse(a.IssuerID)
+	if err != nil || (!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) {
+		return nil
+	}
+	if parsed.User != nil {
+		return issuerIDProblem(fmt.Sprintf("the issuer identifier for the %s embeds credentials in its URL",
+			identity), "Remove the user information from login.issuerId.")
+	}
+	if !issuertrust.Secure(parsed) {
+		return plaintextURL(fmt.Sprintf("the issuer identifier for the %s", identity), "issuerId",
+			"an identifier that is a URL keeps the issuer's rule")
+	}
 	return nil
+}
+
+// issuerIDProblem is a refusal of a login's issuer identifier.
+func issuerIDProblem(message, recovery string) error {
+	return contextProblem("contexts.document_malformed", message, recovery)
 }
 
 // plaintextIssuer refuses an issuer the shell would send credentials to in the
