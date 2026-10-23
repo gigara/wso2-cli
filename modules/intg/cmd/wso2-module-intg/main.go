@@ -122,12 +122,32 @@ func commands() *cobratree.Tree {
 		Use:   "list",
 		Short: "List the projects in the organization.",
 	}
-	projectCommand.AddCommand(projectListCommand)
+	projectShowCommand := &cobra.Command{
+		Use:   "show <project>",
+		Short: "Show one project.",
+	}
+	projectCreateCommand := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Create a project, optionally linked to a repository.",
+	}
+	createFlags := &projectCreateFlags{}
+	createFlags.bind(projectCreateCommand)
+	projectDeleteCommand := &cobra.Command{
+		Use:   "delete <project>",
+		Short: "Delete a project and everything in it.",
+	}
+	deleteFlags := &removalFlags{}
+	projectDeleteCommand.Flags().BoolVar(&deleteFlags.yes, "yes", false,
+		"Confirm the deletion. Without it nothing is deleted.")
+	projectCommand.AddCommand(projectListCommand, projectShowCommand, projectCreateCommand, projectDeleteCommand)
 	root.AddCommand(projectCommand)
 
 	return cobratree.New(root).
 		Handle(statusCommand, status).
-		Handle(projectListCommand, projectList(projectListCommand))
+		Handle(projectListCommand, projectList(projectListCommand)).
+		Handle(projectShowCommand, projectShow(projectShowCommand)).
+		Handle(projectCreateCommand, projectCreate(projectCreateCommand, createFlags)).
+		Handle(projectDeleteCommand, projectDelete(projectDeleteCommand, deleteFlags))
 }
 
 // status answers "wso2 intg status".

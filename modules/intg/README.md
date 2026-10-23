@@ -78,7 +78,10 @@ resource. `dev/` holds a kit that builds and records all of this locally.
 | Command | Does |
 | --- | --- |
 | `wso2 intg status` | Reports this module's own status and what to run first. Calls nothing. |
-| `wso2 intg project list` | Lists the projects in the organization the token names, with each project's ID, deployment pipeline and linked repository. The API returns one page of at most 20 projects and no continuation cursor. |
+| `wso2 intg project list` | Lists the projects in the organization the token names, with each project's ID, deployment pipeline, linked repository and state. The API returns one page of at most 20 projects and no continuation cursor. |
+| `wso2 intg project show <project>` | Shows one project: ID, name, description, pipeline, repository with its provider, branch, path, creation time and state. A 404 names `wso2 intg project list`. |
+| `wso2 intg project create <name> [--display-name <text>] [--description <text>] [--pipeline <pipeline>] [--repo <url> --branch <branch> [--path <dir>]]` | Creates a project, sending only the options given. `--repo` takes a GitHub or Bitbucket URL; a partial link is refused, because the API drops one without saying so. A name held by a different project is `intg.project_exists`. The API's 503, a project created but not fully set up, is `intg.project_incomplete`, and running the same command again finishes it. |
+| `wso2 intg project delete <project> --yes` | Deletes a project and everything in it. Without `--yes` it calls nothing. Deletion continues in the background, and the project is listed with state `deleting` until it is gone. |
 
 Every failure keeps the API's own words. A missing product URL is
 `intg.product_not_recorded`; 401 and 403 are `intg.not_authorized`; 402 is

@@ -55,6 +55,13 @@ func clientFor(ctx context.Context, request module.Request) (platform.Client, er
 // API's own words rather than inventing a second account of what happened.
 // attempted is a verb phrase such as "list the projects".
 func callFailed(err error, attempted, endpoint string) error {
+	return callFailedNaming(err, attempted, endpoint, "Check the names given on the command line, and that "+
+		"the selected context's URL is the Integration Platform API.")
+}
+
+// callFailedNaming is callFailed for a command that names one resource, whose
+// 404 recovery points at where to find the right name.
+func callFailedNaming(err error, attempted, endpoint, notFoundRecovery string) error {
 	var refusal platform.Failure
 	if !errors.As(err, &refusal) {
 		return problem.New(problem.CategoryProductService, "intg.deployment_unreachable",
@@ -76,8 +83,7 @@ func callFailed(err error, attempted, endpoint string) error {
 	case http.StatusNotFound:
 		return problem.New(problem.CategoryProductService, "intg.not_found",
 			"the Integration Platform found nothing to "+attempted+": "+words).
-			WithRecovery("Check the names given on the command line, and that the selected context's URL " +
-				"is the Integration Platform API.")
+			WithRecovery(notFoundRecovery)
 	default:
 		return problem.New(problem.CategoryProductService, "intg.call_failed",
 			"the Integration Platform could not "+attempted+": "+words).
@@ -93,6 +99,29 @@ func refusalWords(refusal platform.Failure) string {
 		return refusal.Message
 	}
 	return refusal.Error()
+}
+
+// refusal reports whether err is the API refusing with status, and with what.
+func refusal(err error, status int) (platform.Failure, bool) {
+	var refused platform.Failure
+	if errors.As(err, &refused) && refused.Status == status {
+		return refused, true
+	}
+	return platform.Failure{}, false
+}
+
+// exactlyOneArgument proves a command line names exactly one positional
+// argument, refusing none with message and more than one by count.
+func exactlyOneArgument(positional []string, message, recovery string) (string, error) {
+	switch len(positional) {
+	case 0:
+		return "", usageProblem(message, recovery)
+	case 1:
+		return positional[0], nil
+	default:
+		return "", usageProblem(fmt.Sprintf("this command takes one argument, and was given %d",
+			len(positional)), recovery)
+	}
 }
 
 // noArguments refuses a command line that names positional arguments the

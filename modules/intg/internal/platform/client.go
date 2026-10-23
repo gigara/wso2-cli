@@ -73,6 +73,17 @@ func (c Client) Get(ctx context.Context, path string, out any) error {
 	return c.do(ctx, http.MethodGet, path, nil, out)
 }
 
+// Post creates one resource from body, reading the answer into out.
+func (c Client) Post(ctx context.Context, path string, body, out any) error {
+	return c.do(ctx, http.MethodPost, path, body, out)
+}
+
+// Delete removes one resource. The API answers 204 with no body, so there is
+// nothing to read.
+func (c Client) Delete(ctx context.Context, path string) error {
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}
+
 func (c Client) do(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader
 	if body != nil {
@@ -111,7 +122,7 @@ func (c Client) do(ctx context.Context, method, path string, body, out any) erro
 	if answer.StatusCode < 200 || answer.StatusCode > 299 {
 		return failure(answer.StatusCode, read)
 	}
-	if out == nil {
+	if out == nil || len(read) == 0 {
 		return nil
 	}
 	if err := json.Unmarshal(read, out); err != nil {

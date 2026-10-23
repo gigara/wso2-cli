@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,25 +41,33 @@ type stubRoute struct {
 }
 
 // platformStub stands in for the Integration Platform API, recording the
-// method, path and token each call reached it with.
+// method, path, body and token each call reached it with.
 type platformStub struct {
 	*httptest.Server
 	method    string
 	path      string
+	body      []byte
 	presented string
 	calls     int
 }
 
 // newPlatformStub answers each route under basePath with its canned status and
-// body, and anything else with the 404 the API itself would give.
+// body, and anything else with the 404 the API itself would give. A route is
+// keyed by its path alone, or by "METHOD /path" where one path answers more
+// than one method; the method-qualified key wins.
 func newPlatformStub(t *testing.T, routes map[string]stubRoute) *platformStub {
 	t.Helper()
 	stub := &platformStub{}
 	stub.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		stub.calls++
-		stub.method, stub.path = r.Method, r.URL.Path
+		stub.method, stub.path = r.Method, r.URL.EscapedPath()
+		stub.body, _ = io.ReadAll(r.Body)
 		stub.presented = r.Header.Get("Authorization")
-		route, found := routes[strings.TrimPrefix(r.URL.Path, basePath)]
+		relative := strings.TrimPrefix(r.URL.EscapedPath(), basePath)
+		route, found := routes[r.Method+" "+relative]
+		if !found {
+			route, found = routes[relative]
+		}
 		if !found || !strings.HasPrefix(r.URL.Path, basePath) {
 			route = stubRoute{http.StatusNotFound, `{"error":"Not Found","message":"no such route"}`}
 		}
@@ -88,7 +97,7 @@ const twoProjects = `{"items":[
   {"id":"orders","handler":"orders","name":"Orders","defaultDeploymentPipelineId":"default",
    "gitOrganization":"acme","repository":"orders-integrations"},
   {"id":"default-project","handler":"default-project","name":"Default Project",
-   "defaultDeploymentPipelineId":"default","gitOrganization":"","repository":""}]}`
+   "defaultDeploymentPipelineId":"default","gitOrganization":"","repository":"","deleting":true}]}`
 
 func TestProjectListReportsARowPerProject(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{"/projects": {http.StatusOK, twoProjects}})
@@ -113,7 +122,7 @@ func TestProjectListReportsARowPerProject(t *testing.T) {
 	if got := field(outcome, "count"); got != "2" {
 		t.Errorf("count = %q, want 2", got)
 	}
-	wantColumns := []string{"name", "id", "pipeline", "repository"}
+	wantColumns := []string{"name", "id", "pipeline", "repository", "state"}
 	if len(outcome.Result.Columns) != len(wantColumns) {
 		t.Fatalf("columns = %+v, want %v", outcome.Result.Columns, wantColumns)
 	}
@@ -125,12 +134,16 @@ func TestProjectListReportsARowPerProject(t *testing.T) {
 	if len(outcome.Result.Rows) != 2 {
 		t.Fatalf("rows = %+v, want two", outcome.Result.Rows)
 	}
-	if got := strings.Join(outcome.Result.Rows[0].Values, "|"); got != "Orders|orders|default|acme/orders-integrations" {
+	if got := strings.Join(outcome.Result.Rows[0].Values, "|"); got != "Orders|orders|default|acme/orders-integrations|active" {
 		t.Errorf("first row = %q", got)
 	}
 	// A project with no linked repository says so rather than showing a lone slash.
 	if got := outcome.Result.Rows[1].Values[3]; got != "-" {
 		t.Errorf("an unlinked project's repository = %q, want -", got)
+	}
+	// A project whose delete was accepted keeps appearing until it completes.
+	if got := outcome.Result.Rows[1].Values[4]; got != "deleting" {
+		t.Errorf("a project being deleted has state %q, want deleting", got)
 	}
 	assertEndsWithNext(t, outcome)
 }
