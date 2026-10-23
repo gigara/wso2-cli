@@ -1,7 +1,9 @@
 # Contexts for trying the intg module against the WSO2 Cloud development
 # environment. Apply with: ws context apply -f wso2cloud-dev.yaml --use <name>
 #
-# Both log in at the WSO2 Cloud ThunderID with the public WSO2_CLI client.
+# Both log in at the WSO2 Cloud ThunderID with the public WSO2_CLI client. The
+# provider names its issuer "platform-idp" rather than its URL, in its discovery
+# document and its tokens, so issuerId declares that name (ADR 0020).
 contexts:
   # The intended design: the login token is exchanged per command (RFC 8693)
   # for one bound to the Integration Platform API. Today `ws login` refuses
@@ -13,6 +15,7 @@ contexts:
       kind: oauth-browser
       provider: thunder
       issuer: https://platform-idp-development.gateway.dev.cloud.wso2.com
+      issuerId: platform-idp
       clientId: WSO2_CLI
     products:
       intg:
@@ -30,6 +33,7 @@ contexts:
       kind: oauth-browser
       provider: thunder
       issuer: https://platform-idp-development.gateway.dev.cloud.wso2.com
+      issuerId: platform-idp
       clientId: WSO2_CLI
     products:
       intg:

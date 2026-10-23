@@ -37,14 +37,19 @@ go run ./cmd/wso2-module-dev -namespace intg -shell-version 1.0.0-dev \
 	-shell-protocols checkout -shell-path ./bin/ws >/dev/null
 ./bin/ws version
 
-if ./bin/ws context list 2>/dev/null | grep -q 'wso2cloud-dev-direct'; then
-	# Already recorded: re-applying would replace the records and end any
-	# login they hold, so only the selection changes.
-	echo "== The WSO2 Cloud dev contexts are already recorded; selecting $context"
+# The kit file's digest is kept beside the state, so a changed kit file is
+# applied again while an unchanged one leaves the records, and any login they
+# hold, alone.
+kit=modules/intg/dev/wso2cloud-dev.yaml
+stamp="$WSO2_HOME/intg-kit.sha256"
+digest=$( (command -v sha256sum >/dev/null && sha256sum "$kit" || shasum -a 256 "$kit") | cut -d' ' -f1)
+if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$digest" ] &&
+	./bin/ws context list 2>/dev/null | grep -q 'wso2cloud-dev-direct'; then
+	echo "== The WSO2 Cloud dev contexts are up to date; selecting $context"
 	./bin/ws context use "$context"
 else
 	echo "== Recording the WSO2 Cloud dev contexts, selecting $context"
-	./bin/ws context apply -f modules/intg/dev/wso2cloud-dev.yaml --no-install --use "$context"
+	./bin/ws context apply -f "$kit" --no-install --use "$context"
 
 	# An input file cannot state that a product has no grant: apply fills the
 	# module's exchange grant in. The workaround context is made direct here
@@ -60,6 +65,7 @@ else
 		{ skip = 0; print }
 	' "$document" >"$document.tmp" && mv "$document.tmp" "$document"
 	./bin/ws context list
+	echo "$digest" >"$stamp"
 fi
 
 cat <<NEXT
