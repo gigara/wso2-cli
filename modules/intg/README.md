@@ -44,7 +44,9 @@ reads the organization from the token's `ouId`, `ouHandle` and `ouName` claims,
 so no command takes an organization.
 
 `module.json` declares the product as reached by exchange, so recording it
-needs only its URL, and the audience defaults to that URL:
+needs only its URL, and the audience defaults to that URL. WSO2 Cloud's
+ThunderID names its issuer `platform-idp` rather than its URL, so the context
+declares that as `issuerId`:
 
 ```yaml
 contexts:
@@ -54,6 +56,7 @@ contexts:
       kind: oauth-browser
       provider: thunder
       issuer: https://platform-idp-development.gateway.dev.cloud.wso2.com
+      issuerId: platform-idp
       clientId: WSO2_CLI
     products:
       intg:
@@ -62,12 +65,13 @@ contexts:
 
 ```sh
 ws context apply -f wso2cloud-dev.yaml --use wso2cloud-dev
+ws login
+ws intg project list
 ```
 
-Known gap: on a ThunderID context whose only product is reached by exchange,
-`ws login` refuses with `auth.product_not_configured`, because the shell binds
-a ThunderID login to a directly reached product. Resolving that is shell work
-tracked separately.
+The login names no resource, because the context's only product is reached by
+exchange; each command then exchanges the login token for the product's own
+resource. `dev/` holds a kit that builds and records all of this locally.
 
 ## Commands
 

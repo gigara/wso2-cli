@@ -1,14 +1,15 @@
-# Contexts for trying the intg module against the WSO2 Cloud development
-# environment. Apply with: ws context apply -f wso2cloud-dev.yaml --use <name>
+# A context for trying the intg module against the WSO2 Cloud development
+# environment. Apply with: ws context apply -f wso2cloud-dev.yaml --use wso2cloud-dev
 #
-# Both log in at the WSO2 Cloud ThunderID with the public WSO2_CLI client. The
-# provider names its issuer "platform-idp" rather than its URL, in its discovery
-# document and its tokens, so issuerId declares that name (ADR 0020).
+# It logs in at the WSO2 Cloud ThunderID with the public WSO2_CLI client. The
+# provider names its issuer "platform-idp" rather than its URL, in its
+# discovery document and its tokens, so issuerId declares that name (ADR 0020).
+#
+# The intg product is reached by exchange, which the module's descriptor fills
+# in: the login names no resource, and each command exchanges the login token
+# (RFC 8693) for one bound to the Integration Platform API, whose resource
+# server identifier is the API's URL.
 contexts:
-  # The intended design: the login token is exchanged per command (RFC 8693)
-  # for one bound to the Integration Platform API. Today `ws login` refuses
-  # this context with auth.product_not_configured, because the shell binds a
-  # ThunderID login to a directly reached product and this context has none.
   - name: wso2cloud-dev
     type: cloud
     login:
@@ -20,22 +21,3 @@ contexts:
     products:
       intg:
         url: https://development-wso2cloud.gateway.dev.cloud.wso2.com/ipaas-service-ipaas-api-endpoint
-
-  # A workaround for trying a live call before that is fixed: the login itself
-  # names the Integration Platform API as its resource, and no exchange runs.
-  # Applying this file still gives it the module's exchange grant, because an
-  # input file cannot state "no grant"; setup.sh removes the grant from the
-  # stored record and names intg as the login product. Untested against
-  # ThunderID; see the README in this directory.
-  - name: wso2cloud-dev-direct
-    type: cloud
-    login:
-      kind: oauth-browser
-      provider: thunder
-      issuer: https://platform-idp-development.gateway.dev.cloud.wso2.com
-      issuerId: platform-idp
-      clientId: WSO2_CLI
-    products:
-      intg:
-        url: https://development-wso2cloud.gateway.dev.cloud.wso2.com/ipaas-service-ipaas-api-endpoint
-        audience: https://development-wso2cloud.gateway.dev.cloud.wso2.com/ipaas-service-ipaas-api-endpoint

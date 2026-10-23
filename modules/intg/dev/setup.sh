@@ -1,24 +1,14 @@
 #!/usr/bin/env bash
 # Builds the shell and the intg module from this checkout, installs the module
-# into a state root of its own, and records the WSO2 Cloud dev contexts.
+# into a state root of its own, and records the WSO2 Cloud dev context.
 #
 # Usage, from anywhere in the checkout:
-#   modules/intg/dev/setup.sh [context]
-# context is wso2cloud-dev-direct (default) or wso2cloud-dev.
+#   modules/intg/dev/setup.sh
 #
 # The state root defaults to ~/.wso2-intg-test so your own ~/.wso2 is never
 # touched, and it survives between runs so a login is kept. Override it with
 # WSO2_HOME. Needs Go 1.26.9 or later on PATH.
 set -euo pipefail
-
-context=${1:-wso2cloud-dev-direct}
-case $context in
-wso2cloud-dev | wso2cloud-dev-direct) ;;
-*)
-	echo "unknown context $context: use wso2cloud-dev-direct or wso2cloud-dev" >&2
-	exit 64
-	;;
-esac
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 cd "$repo_root"
@@ -37,34 +27,25 @@ go run ./cmd/wso2-module-dev -namespace intg -shell-version 1.0.0-dev \
 	-shell-protocols checkout -shell-path ./bin/ws >/dev/null
 ./bin/ws version
 
+# An earlier kit also recorded a workaround context; it is no longer needed.
+if ./bin/ws context list 2>/dev/null | grep -q 'wso2cloud-dev-direct'; then
+	echo "== Removing the earlier kit's wso2cloud-dev-direct context"
+	./bin/ws context delete wso2cloud-dev-direct
+fi
+
 # The kit file's digest is kept beside the state, so a changed kit file is
-# applied again while an unchanged one leaves the records, and any login they
-# hold, alone.
+# applied again while an unchanged one leaves the record, and any login it
+# holds, alone.
 kit=modules/intg/dev/wso2cloud-dev.yaml
 stamp="$WSO2_HOME/intg-kit.sha256"
 digest=$( (command -v sha256sum >/dev/null && sha256sum "$kit" || shasum -a 256 "$kit") | cut -d' ' -f1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$digest" ] &&
-	./bin/ws context list 2>/dev/null | grep -q 'wso2cloud-dev-direct'; then
-	echo "== The WSO2 Cloud dev contexts are up to date; selecting $context"
-	./bin/ws context use "$context"
+	./bin/ws context list 2>/dev/null | grep -q 'wso2cloud-dev'; then
+	echo "== The WSO2 Cloud dev context is up to date"
+	./bin/ws context use wso2cloud-dev
 else
-	echo "== Recording the WSO2 Cloud dev contexts, selecting $context"
-	./bin/ws context apply -f "$kit" --no-install --use "$context"
-
-	# An input file cannot state that a product has no grant: apply fills the
-	# module's exchange grant in. The workaround context is made direct here
-	# instead, by removing that grant and naming intg as the login product,
-	# which a direct product requires. The shell validates the document on
-	# its next read, which the context list below is.
-	document="$WSO2_HOME/cli/contexts.yaml"
-	awk '
-		/^  - name: / { current = $3 }
-		current == "wso2cloud-dev-direct" && /^      provider: thunder$/ { print; print "      product: intg"; next }
-		current == "wso2cloud-dev-direct" && /^        grant:$/ { skip = 1; next }
-		skip && /^          / { next }
-		{ skip = 0; print }
-	' "$document" >"$document.tmp" && mv "$document.tmp" "$document"
-	./bin/ws context list
+	echo "== Recording the WSO2 Cloud dev context"
+	./bin/ws context apply -f "$kit" --no-install --use wso2cloud-dev
 	echo "$digest" >"$stamp"
 fi
 
@@ -79,6 +60,4 @@ Then:
   ./bin/ws login                          # opens the browser; sign in and pick your organization
   ./bin/ws intg project list --verbose
   ./bin/ws intg project list -o json
-
-Switch contexts with ./bin/ws context use wso2cloud-dev or wso2cloud-dev-direct.
 NEXT
