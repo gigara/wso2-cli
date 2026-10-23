@@ -23,6 +23,7 @@ go 1.26.9
 use (
 	.
 	./modules/example
+	./modules/intg
 	./modules/apim
 	./modules/iam
 	./sdk
