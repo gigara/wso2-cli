@@ -66,6 +66,8 @@ type exchangeSource struct {
 	// exchange asks for as its resource, and what the issued token is proved
 	// to be bound to.
 	audience string
+	// debug is the broker's TokenDebug, nil unless the shell set one.
+	debug func(stage, token string)
 }
 
 // mint exchanges the login session's access token, holding that session's
@@ -110,6 +112,9 @@ func (s exchangeSource) exchange(ctx context.Context, request Request, now time.
 	if err != nil {
 		return Grant{}, err
 	}
+	if s.debug != nil {
+		s.debug("login", renewed.AccessToken)
+	}
 	endpoint, err := tokenEndpoint(ctx, s.login.client, s.login.issuer, s.login.issuerID)
 	if err != nil {
 		return Grant{}, err
@@ -130,6 +135,9 @@ func (s exchangeSource) exchange(ctx context.Context, request Request, now time.
 	// No refresh token is read, and none is expected: an exchange answers with
 	// an access token alone. Nothing here could be stored as a session, which
 	// is the property the strategy is built on rather than a limitation of it.
+	if s.debug != nil {
+		s.debug("exchanged", issued.AccessToken)
+	}
 	facts, err := s.verifyBinding(issued)
 	if err != nil {
 		return Grant{}, err

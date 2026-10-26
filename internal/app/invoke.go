@@ -165,6 +165,7 @@ func (s Shell) invokeModule(namespace string, resolved modules.Resolved, args []
 		StateRoot:    root,
 	}
 	broker.EstablishSession = s.sessionEstablisher(selection, namespace, noInput)
+	broker.TokenDebug = s.tokenDebug()
 
 	launcher := rpc.Launcher{
 		Resolved: resolved,

@@ -140,6 +140,13 @@ type Broker struct {
 	// was asked about.
 	EstablishSession func(access contexts.ProductAccess) error
 
+	// TokenDebug, when set, is handed the tokens an exchange runs on: the
+	// login session's access token as "login" and the token it is exchanged
+	// for as "exchanged", before the exchanged one is checked. It is a
+	// temporary diagnostic for bringing up a deployment, nil unless the shell
+	// sets it, and it is the one place token material leaves the broker.
+	TokenDebug func(stage, token string)
+
 	// granted records that this invocation already has access, so the module
 	// cannot come back for more.
 	granted bool
