@@ -35,7 +35,8 @@ The login runs at the WSO2 Cloud ThunderID with the public `WSO2_CLI` client and
 names no resource, because the context's only product is reached by exchange.
 Each `ws intg` command exchanges the login token (RFC 8693) for one bound to the
 Integration Platform API, and the shell checks that token's audience before the
-module receives it. An earlier version of this kit also recorded a
+module receives it. Build logs are read from WSO2 Cloud's observability proxy,
+which the context records as the product's gateway. An earlier version of this kit also recorded a
 `wso2cloud-dev-direct` workaround context; `setup.sh` deletes it.
 
 ## Seeing the tokens (temporary)

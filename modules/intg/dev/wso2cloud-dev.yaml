@@ -21,3 +21,6 @@ contexts:
     products:
       intg:
         url: https://development-wso2cloud.gateway.dev.cloud.wso2.com/ipaas-service-ipaas-api-endpoint
+        # WSO2 Cloud's observability proxy, which build logs are read from.
+        gateway:
+          url: https://cloud-obs-proxy.obs.dp.dev.cloud.wso2.com/wso2cloud-obs

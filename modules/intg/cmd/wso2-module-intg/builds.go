@@ -28,6 +28,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/wso2/wso2-cli/modules/intg/internal/platform"
 	"github.com/wso2/wso2-cli/sdk/module"
 	"github.com/wso2/wso2-cli/sdk/problem"
 	"github.com/wso2/wso2-cli/sdk/result"
@@ -257,14 +258,14 @@ type buildLogsFlags struct {
 	tail int
 }
 
-// logsQueryPath is the observability proxy's log query, reached through the
-// integration API's /observability pass-through with the caller's token. It
-// is the request the Integration Platform console makes for a build's log.
+// logsQueryPath is the log query of WSO2 Cloud's observability proxy,
+// relative to the gateway URL a context records for this product (for
+// example https://cloud-obs-proxy.obs.dp.<domain>/wso2cloud-obs). It is the
+// request the Integration Platform console makes for a build's log.
 //
-// The API's own build-log route is not used: it asks the proxy for
-// /api/logs/build/{build}, a path the proxy does not serve (it routes only
-// /wso2cloud-obs/), so it fails with a 500 for every caller.
-const logsQueryPath = "/observability/wso2cloud-obs/api/v1/logs/query"
+// The proxy is called directly, as the WSO2 Cloud team asked: the API's own
+// build-log route and its /observability pass-through are being removed.
+const logsQueryPath = "/api/v1/logs/query"
 
 // logsQueryLimit is the most lines one build log is read with, the same bound
 // the API's own route uses.
@@ -292,9 +293,15 @@ func (b build) logWindow(now time.Time) (time.Time, time.Time) {
 // buildLogs answers "wso2 intg build logs <component> <build> [--tail <n>]".
 //
 // The build is read first, which confirms it exists and bounds the search to
-// its run. The log is then queried as the workflow run of that name. The
+// its run. The log is then queried from the observability proxy, recorded on
+// the context as the product's gateway, as the workflow run of that name. The
 // proxy sets searchScope.namespace from the token's organization, so the
 // member is sent empty.
+//
+// The proxy is presented the token the API is called with. It verifies the
+// token's signature and organization claims, and checks no audience, so no
+// second exchange is needed; a resource server of the proxy's own would let
+// it have a token bound to it instead.
 func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
 		componentID, buildName, err := exactlyTwoArguments(command.Flags().Args(),
@@ -305,6 +312,13 @@ func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 		if flags.tail < 0 {
 			return result.Result{}, usageProblem("--tail "+strconv.Itoa(flags.tail)+" is not a number of lines",
 				"Give --tail a positive number, or leave it out to see the whole log.")
+		}
+		if request.Context.GatewayEndpoint == "" {
+			return result.Result{}, problem.New(problem.CategoryAuthPolicy, "intg.observability_not_recorded",
+				"the selected context records no observability URL for the intg product, so build logs have "+
+					"nowhere to be read from").
+				WithRecovery("Run wso2 context product add intg --url <integration platform API URL> --gateway " +
+					"<observability URL> --replace to record it, then run this command again.")
 		}
 		client, err := clientFor(ctx, request)
 		if err != nil {
@@ -336,9 +350,10 @@ func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 			} `json:"logs"`
 			Total int `json:"total"`
 		}
-		if err := client.Post(ctx, logsQueryPath, query, &answer); err != nil {
+		observability := platform.Client{Endpoint: request.Context.GatewayEndpoint, Token: client.Token}
+		if err := observability.Post(ctx, logsQueryPath, query, &answer); err != nil {
 			return result.Result{}, callFailed(err, "read the log of the build "+buildName+" of "+componentID,
-				request.Context.Endpoint)
+				request.Context.GatewayEndpoint)
 		}
 		lines := make([]string, len(answer.Logs))
 		for i, entry := range answer.Logs {

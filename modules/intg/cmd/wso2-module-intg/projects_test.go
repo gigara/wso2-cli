@@ -44,6 +44,7 @@ type stubRoute struct {
 // method, path, body and token each call reached it with.
 type platformStub struct {
 	*httptest.Server
+	prefix    string
 	method    string
 	path      string
 	query     string
@@ -59,19 +60,26 @@ type platformStub struct {
 // than one method; the method-qualified key wins.
 func newPlatformStub(t *testing.T, routes map[string]stubRoute) *platformStub {
 	t.Helper()
-	stub := &platformStub{}
+	return newStubAt(t, basePath, routes)
+}
+
+// newStubAt is newPlatformStub for a service served under prefix, such as the
+// observability proxy beside the API.
+func newStubAt(t *testing.T, prefix string, routes map[string]stubRoute) *platformStub {
+	t.Helper()
+	stub := &platformStub{prefix: prefix}
 	stub.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		stub.calls++
 		stub.method, stub.path, stub.query = r.Method, r.URL.EscapedPath(), r.URL.RawQuery
 		stub.paths = append(stub.paths, r.Method+" "+r.URL.EscapedPath())
 		stub.body, _ = io.ReadAll(r.Body)
 		stub.presented = r.Header.Get("Authorization")
-		relative := strings.TrimPrefix(r.URL.EscapedPath(), basePath)
+		relative := strings.TrimPrefix(r.URL.EscapedPath(), prefix)
 		route, found := routes[r.Method+" "+relative]
 		if !found {
 			route, found = routes[relative]
 		}
-		if !found || !strings.HasPrefix(r.URL.Path, basePath) {
+		if !found || !strings.HasPrefix(r.URL.Path, prefix) {
 			route = stubRoute{http.StatusNotFound, `{"error":"Not Found","message":"no such route"}`}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -84,7 +92,7 @@ func newPlatformStub(t *testing.T, routes map[string]stubRoute) *platformStub {
 
 // endpoint is the product URL a context records for the stub: the API's base
 // path, the way the WSO2 Cloud URL carries it.
-func (s *platformStub) endpoint() string { return s.URL + basePath }
+func (s *platformStub) endpoint() string { return s.URL + s.prefix }
 
 // run invokes one command of this module through the contract.
 func run(command []string, arguments []string, endpoint string, access *testkit.Access) testkit.Outcome {

@@ -61,7 +61,13 @@ contexts:
     products:
       intg:
         url: https://development-wso2cloud.gateway.dev.cloud.wso2.com/ipaas-service-ipaas-api-endpoint
+        gateway:
+          url: https://cloud-obs-proxy.obs.dp.dev.cloud.wso2.com/wso2cloud-obs
 ```
+
+The gateway is WSO2 Cloud's observability proxy, which build logs are read
+from. It is presented the same exchanged token as the API: it checks the
+token's signature and organization claims, and no audience.
 
 ```sh
 ws context apply -f wso2cloud-dev.yaml --use wso2cloud-dev
@@ -89,7 +95,7 @@ resource. `dev/` holds a kit that builds and records all of this locally.
 | `wso2 intg build run <component> [--commit <sha>]` | Starts a build of the component's branch head, or of a full 40-character commit SHA, since a build cannot fetch a short one. The API does not name the build it started, so the result points at `build list`, which lists the newest first. |
 | `wso2 intg build list <component>` | Lists a component's recent builds, newest first: name, status, trigger, the first 12 characters of the commit, start and completion. The API returns at most 20, with no continuation cursor. |
 | `wso2 intg build show <component> <build>` | Shows one build: status, trigger, full commit, image, times and each step's phase. The next step follows the status: the logs of a failed build, or `build show` again for one still running. The API answers an unknown build name with a 500, so that refusal also points at `build list`. |
-| `wso2 intg build logs <component> <build> [--tail <n>]` | Shows a build's log, or its last `n` lines, read the way the console reads it: a log query for the build's workflow run through the API's `/observability` pass-through to WSO2 Cloud's observability proxy, bounded to the build's own run. The API's own build-log route is not used, because it asks the proxy for a path the proxy does not serve. At most 1000 lines; a build with no output yet says so. |
+| `wso2 intg build logs <component> <build> [--tail <n>]` | Shows a build's log, or its last `n` lines, read the way the console reads it: a log query for the build's workflow run, sent directly to WSO2 Cloud's observability proxy, which the context records as the product's gateway. The search is bounded to the build's own run. At most 1000 lines; a build with no output yet says so. A context with no gateway is refused with `intg.observability_not_recorded`. |
 
 Every failure keeps the API's own words. A missing product URL is
 `intg.product_not_recorded`; 401 and 403 are `intg.not_authorized`; 402 is

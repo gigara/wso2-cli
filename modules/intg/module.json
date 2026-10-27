@@ -12,7 +12,10 @@
     "product": {
       "audience": "resource",
       "scopes": [],
-      "grant": "exchange"
+      "grant": "exchange",
+      "gateway": {
+        "audience": "resource"
+      }
     }
   }
 }
