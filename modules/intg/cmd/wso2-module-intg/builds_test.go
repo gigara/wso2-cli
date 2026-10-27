@@ -231,8 +231,54 @@ const buildLog = `{"init":{"log":"","status":"","steps":[]},
   "build":{"log":"2026-10-27T09:00:01Z cloning\n2026-10-27T09:01:00Z compiling\n2026-10-27T09:04:00Z error: missing module\n","status":"","steps":[]},
   "deploy":{"log":"","status":"","steps":[]}}`
 
+// logsStub answers the build b1 of order-api, in the project orders, and its
+// log; and b2, which has produced no output yet.
+func logsStub(t *testing.T, log string) *platformStub {
+	return newPlatformStub(t, map[string]stubRoute{
+		"/components/order-api/builds/b1":      {http.StatusOK, `{"name":"b1","projectName":"orders","status":"Failed"}`},
+		"/components/order-api/builds/b1/logs": {http.StatusOK, log},
+		"/components/order-api/builds/b2":      {http.StatusOK, `{"name":"b2","projectName":"orders","status":"Running"}`},
+		"/components/order-api/builds/b2/logs": {http.StatusOK, log},
+	})
+}
+
+// The log service filters by project, and the API passes projectName to it as
+// given without resolving it from the component, so a request without one is
+// refused with an opaque 500. The build itself names its project, so the log
+// is asked for with that.
+func TestBuildLogsAsksForTheLogWithTheBuildsProject(t *testing.T) {
+	stub := logsStub(t, buildLog)
+
+	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1"}, stub.endpoint(), &testkit.Access{Token: "t"})
+
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("build logs failed: %v %v", outcome.Err, outcome.Problem)
+	}
+	want := []string{"GET " + basePath + "/components/order-api/builds/b1", "GET " + basePath + "/components/order-api/builds/b1/logs"}
+	if strings.Join(stub.paths, ", ") != strings.Join(want, ", ") {
+		t.Errorf("calls = %v, want %v", stub.paths, want)
+	}
+	if stub.query != "projectName=orders" {
+		t.Errorf("the log was asked for with query %q, want projectName=orders", stub.query)
+	}
+}
+
+func TestBuildLogsWithAProjectAsksForTheLogDirectly(t *testing.T) {
+	stub := logsStub(t, buildLog)
+
+	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1", "--project", "orders"}, stub.endpoint(),
+		&testkit.Access{Token: "t"})
+
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("build logs failed: %v %v", outcome.Err, outcome.Problem)
+	}
+	if len(stub.paths) != 1 || stub.query != "projectName=orders" {
+		t.Errorf("calls = %v with query %q, want only the log, with projectName=orders", stub.paths, stub.query)
+	}
+}
+
 func TestBuildLogsReportsTheWholeLog(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/components/order-api/builds/b1/logs": {http.StatusOK, buildLog}})
+	stub := logsStub(t, buildLog)
 
 	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -250,7 +296,7 @@ func TestBuildLogsReportsTheWholeLog(t *testing.T) {
 }
 
 func TestBuildLogsTailKeepsTheLastLines(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/components/order-api/builds/b1/logs": {http.StatusOK, buildLog}})
+	stub := logsStub(t, buildLog)
 
 	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1", "--tail", "1"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
@@ -264,8 +310,7 @@ func TestBuildLogsTailKeepsTheLastLines(t *testing.T) {
 }
 
 func TestBuildLogsOfABuildWithNoOutputYetSaysSo(t *testing.T) {
-	empty := `{"init":{"log":""},"build":{"log":""},"deploy":{"log":""}}`
-	stub := newPlatformStub(t, map[string]stubRoute{"/components/order-api/builds/b2/logs": {http.StatusOK, empty}})
+	stub := logsStub(t, `{"init":{"log":""},"build":{"log":""},"deploy":{"log":""}}`)
 
 	outcome := run([]string{"build", "logs"}, []string{"order-api", "b2"}, stub.endpoint(), &testkit.Access{Token: "t"})
 

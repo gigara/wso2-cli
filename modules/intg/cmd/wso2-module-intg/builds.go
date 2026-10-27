@@ -252,13 +252,20 @@ func buildReadFailed(err error, attempted, endpoint, componentID string) error {
 
 // buildLogsFlags are the options of "wso2 intg build logs".
 type buildLogsFlags struct {
-	tail int
+	tail    int
+	project string
 }
 
 // buildLogs answers "wso2 intg build logs <component> <build> [--tail <n>]".
 //
 // The API keeps at most 1000 lines from the last 30 days, oldest first, all in
 // the build stage of the console's init/build/deploy envelope.
+//
+// The log is asked for with the build's project. The log service filters by
+// project, and the API passes projectName to it as given, without resolving
+// it from the component the way starting a build does, so a request without
+// one fails with an opaque 500. Unless --project names it, the build is read
+// first: it reports its own project.
 func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
 		componentID, buildName, err := exactlyTwoArguments(command.Flags().Args(),
@@ -274,12 +281,21 @@ func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 		if err != nil {
 			return result.Result{}, err
 		}
+		projectID := flags.project
+		if projectID == "" {
+			var found build
+			if err := client.Get(ctx, buildPath(componentID, buildName), &found); err != nil {
+				return result.Result{}, buildReadFailed(err, "find the project of the build "+buildName+" of "+
+					componentID, request.Context.Endpoint, componentID)
+			}
+			projectID = found.Project
+		}
 		var stages struct {
 			Init, Build, Deploy struct {
 				Log string `json:"log"`
 			}
 		}
-		if err := client.Get(ctx, buildPath(componentID, buildName)+"/logs", &stages); err != nil {
+		if err := client.Get(ctx, withProject(buildPath(componentID, buildName)+"/logs", projectID), &stages); err != nil {
 			return result.Result{}, buildReadFailed(err, "read the log of the build "+buildName+" of "+componentID,
 				request.Context.Endpoint, componentID)
 		}
