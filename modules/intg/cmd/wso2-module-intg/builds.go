@@ -21,8 +21,10 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -252,20 +254,47 @@ func buildReadFailed(err error, attempted, endpoint, componentID string) error {
 
 // buildLogsFlags are the options of "wso2 intg build logs".
 type buildLogsFlags struct {
-	tail    int
-	project string
+	tail int
+}
+
+// logsQueryPath is the observability proxy's log query, reached through the
+// integration API's /observability pass-through with the caller's token. It
+// is the request the Integration Platform console makes for a build's log.
+//
+// The API's own build-log route is not used: it asks the proxy for
+// /api/logs/build/{build}, a path the proxy does not serve (it routes only
+// /wso2cloud-obs/), so it fails with a 500 for every caller.
+const logsQueryPath = "/observability/wso2cloud-obs/api/v1/logs/query"
+
+// logsQueryLimit is the most lines one build log is read with, the same bound
+// the API's own route uses.
+const logsQueryLimit = 1000
+
+// logWindowMargin widens a build's run on both sides, so lines stamped just
+// before it started or after it completed are not cut off.
+const logWindowMargin = 5 * time.Minute
+
+// logWindow is the time range to search for a build's log: its run, widened
+// by logWindowMargin, up to now while it has not completed, and the last 30
+// days when it states no start.
+func (b build) logWindow(now time.Time) (time.Time, time.Time) {
+	start, err := time.Parse(time.RFC3339, b.Started)
+	if err != nil {
+		return now.Add(-30 * 24 * time.Hour), now
+	}
+	end := now
+	if completed, err := time.Parse(time.RFC3339, b.Completed); err == nil {
+		end = completed.Add(logWindowMargin)
+	}
+	return start.Add(-logWindowMargin), end
 }
 
 // buildLogs answers "wso2 intg build logs <component> <build> [--tail <n>]".
 //
-// The API keeps at most 1000 lines from the last 30 days, oldest first, all in
-// the build stage of the console's init/build/deploy envelope.
-//
-// The log is asked for with the build's project. The log service filters by
-// project, and the API passes projectName to it as given, without resolving
-// it from the component the way starting a build does, so a request without
-// one fails with an opaque 500. Unless --project names it, the build is read
-// first: it reports its own project.
+// The build is read first, which confirms it exists and bounds the search to
+// its run. The log is then queried as the workflow run of that name. The
+// proxy sets searchScope.namespace from the token's organization, so the
+// member is sent empty.
 func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
 		componentID, buildName, err := exactlyTwoArguments(command.Flags().Args(),
@@ -281,34 +310,50 @@ func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 		if err != nil {
 			return result.Result{}, err
 		}
-		projectID := flags.project
-		if projectID == "" {
-			var found build
-			if err := client.Get(ctx, buildPath(componentID, buildName), &found); err != nil {
-				return result.Result{}, buildReadFailed(err, "find the project of the build "+buildName+" of "+
-					componentID, request.Context.Endpoint, componentID)
-			}
-			projectID = found.Project
-		}
-		var stages struct {
-			Init, Build, Deploy struct {
-				Log string `json:"log"`
-			}
-		}
-		if err := client.Get(ctx, withProject(buildPath(componentID, buildName)+"/logs", projectID), &stages); err != nil {
-			return result.Result{}, buildReadFailed(err, "read the log of the build "+buildName+" of "+componentID,
+		var found build
+		if err := client.Get(ctx, buildPath(componentID, buildName), &found); err != nil {
+			return result.Result{}, buildReadFailed(err, "find the build "+buildName+" of "+componentID,
 				request.Context.Endpoint, componentID)
 		}
-		var lines []string
-		for _, stage := range []string{stages.Init.Log, stages.Build.Log, stages.Deploy.Log} {
-			if text := strings.TrimRight(stage, "\n"); text != "" {
-				lines = append(lines, strings.Split(text, "\n")...)
+		start, end := found.logWindow(time.Now().UTC())
+		// The newest lines are asked for first when only a tail is wanted, so
+		// a long log is not cut off at the limit before its end is reached.
+		order, limit := "asc", logsQueryLimit
+		if flags.tail > 0 && flags.tail < logsQueryLimit {
+			order, limit = "desc", flags.tail
+		}
+		query := map[string]any{
+			"searchScope": map[string]string{"namespace": "", "workflowRunName": buildName},
+			"startTime":   start.Format(time.RFC3339),
+			"endTime":     end.Format(time.RFC3339),
+			"limit":       limit,
+			"sortOrder":   order,
+		}
+		var answer struct {
+			Logs []struct {
+				Timestamp string `json:"timestamp"`
+				Log       string `json:"log"`
+			} `json:"logs"`
+			Total int `json:"total"`
+		}
+		if err := client.Post(ctx, logsQueryPath, query, &answer); err != nil {
+			return result.Result{}, callFailed(err, "read the log of the build "+buildName+" of "+componentID,
+				request.Context.Endpoint)
+		}
+		lines := make([]string, len(answer.Logs))
+		for i, entry := range answer.Logs {
+			line := strings.TrimRight(entry.Log, "\n")
+			if entry.Timestamp != "" {
+				line = entry.Timestamp + " " + line
 			}
+			lines[i] = line
+		}
+		if order == "desc" {
+			slices.Reverse(lines)
 		}
 		count := strconv.Itoa(len(lines))
-		if flags.tail > 0 && flags.tail < len(lines) {
-			count = strconv.Itoa(flags.tail) + " of " + count
-			lines = lines[len(lines)-flags.tail:]
+		if answer.Total > len(lines) {
+			count += " of " + strconv.Itoa(answer.Total)
 		}
 		next := "Run wso2 intg build show " + componentID + " " + buildName + " to see its status."
 		if len(lines) == 0 {

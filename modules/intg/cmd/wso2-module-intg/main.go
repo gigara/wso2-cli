@@ -203,8 +203,6 @@ func commands() *cobratree.Tree {
 	buildLogsFlagsValue := &buildLogsFlags{}
 	buildLogsCommand.Flags().IntVar(&buildLogsFlagsValue.tail, "tail", 0,
 		"Show only the last this many lines. Defaults to the whole log.")
-	buildLogsCommand.Flags().StringVar(&buildLogsFlagsValue.project, "project", "",
-		"The project the component is in. Defaults to the one the build reports.")
 	buildCommand.AddCommand(buildRunCommand, buildListCommand, buildShowCommand, buildLogsCommand)
 	root.AddCommand(buildCommand)
 

@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wso2/wso2-cli/sdk/problem"
 	"github.com/wso2/wso2-cli/sdk/testkit"
@@ -227,58 +228,56 @@ func TestBuildShowNeedsAComponentAndABuild(t *testing.T) {
 
 // --- build logs -----------------------------------------------------------
 
-const buildLog = `{"init":{"log":"","status":"","steps":[]},
-  "build":{"log":"2026-10-27T09:00:01Z cloning\n2026-10-27T09:01:00Z compiling\n2026-10-27T09:04:00Z error: missing module\n","status":"","steps":[]},
-  "deploy":{"log":"","status":"","steps":[]}}`
+const buildLogEntries = `{"logs":[
+  {"timestamp":"2026-10-27T09:00:01Z","log":"cloning","level":"INFO"},
+  {"timestamp":"2026-10-27T09:01:00Z","log":"compiling","level":"INFO"},
+  {"timestamp":"2026-10-27T09:04:00Z","log":"error: missing module","level":"ERROR"}],"total":3,"tookMs":12}`
 
-// logsStub answers the build b1 of order-api, in the project orders, and its
-// log; and b2, which has produced no output yet.
-func logsStub(t *testing.T, log string) *platformStub {
+// logsStub answers the build b1 of order-api, which ran from 09:00 to 09:04,
+// and the log query with entries.
+func logsStub(t *testing.T, entries string) *platformStub {
 	return newPlatformStub(t, map[string]stubRoute{
-		"/components/order-api/builds/b1":      {http.StatusOK, `{"name":"b1","projectName":"orders","status":"Failed"}`},
-		"/components/order-api/builds/b1/logs": {http.StatusOK, log},
-		"/components/order-api/builds/b2":      {http.StatusOK, `{"name":"b2","projectName":"orders","status":"Running"}`},
-		"/components/order-api/builds/b2/logs": {http.StatusOK, log},
+		"/components/order-api/builds/b1": {http.StatusOK,
+			`{"name":"b1","status":"Failed","startedAt":"2026-10-27T09:00:00Z","completedAt":"2026-10-27T09:04:00Z"}`},
+		"/components/order-api/builds/b2": {http.StatusOK,
+			`{"name":"b2","status":"Running","startedAt":"2026-10-27T10:00:00Z"}`},
+		"POST " + logsQueryPath: {http.StatusOK, entries},
 	})
 }
 
-// The log service filters by project, and the API passes projectName to it as
-// given without resolving it from the component, so a request without one is
-// refused with an opaque 500. The build itself names its project, so the log
-// is asked for with that.
-func TestBuildLogsAsksForTheLogWithTheBuildsProject(t *testing.T) {
-	stub := logsStub(t, buildLog)
+// The API's own build-log route asks the observability proxy for a path it
+// does not serve, so the log is read the way the console reads it: a log query
+// for the build's workflow run, through the API's observability pass-through.
+func TestBuildLogsQueriesTheBuildsWorkflowRunOverItsOwnRun(t *testing.T) {
+	stub := logsStub(t, buildLogEntries)
 
 	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
 		t.Fatalf("build logs failed: %v %v", outcome.Err, outcome.Problem)
 	}
-	want := []string{"GET " + basePath + "/components/order-api/builds/b1", "GET " + basePath + "/components/order-api/builds/b1/logs"}
+	want := []string{"GET " + basePath + "/components/order-api/builds/b1", "POST " + basePath + logsQueryPath}
 	if strings.Join(stub.paths, ", ") != strings.Join(want, ", ") {
 		t.Errorf("calls = %v, want %v", stub.paths, want)
 	}
-	if stub.query != "projectName=orders" {
-		t.Errorf("the log was asked for with query %q, want projectName=orders", stub.query)
+	sent := decodeBody(t, stub.body)
+	scope := sent["searchScope"].(map[string]any)
+	if scope["workflowRunName"] != "b1" {
+		t.Errorf("searchScope = %v, want the workflow run b1", scope)
 	}
-}
-
-func TestBuildLogsWithAProjectAsksForTheLogDirectly(t *testing.T) {
-	stub := logsStub(t, buildLog)
-
-	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1", "--project", "orders"}, stub.endpoint(),
-		&testkit.Access{Token: "t"})
-
-	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("build logs failed: %v %v", outcome.Err, outcome.Problem)
+	if _, named := scope["namespace"]; !named {
+		t.Errorf("searchScope = %v, want a namespace member for the proxy to fill in", scope)
 	}
-	if len(stub.paths) != 1 || stub.query != "projectName=orders" {
-		t.Errorf("calls = %v with query %q, want only the log, with projectName=orders", stub.paths, stub.query)
+	if sent["startTime"] != "2026-10-27T08:55:00Z" || sent["endTime"] != "2026-10-27T09:09:00Z" {
+		t.Errorf("window = %v to %v, want the build's run with five minutes either side", sent["startTime"], sent["endTime"])
+	}
+	if sent["sortOrder"] != "asc" || sent["limit"] != float64(1000) {
+		t.Errorf("sortOrder %v limit %v, want asc and 1000", sent["sortOrder"], sent["limit"])
 	}
 }
 
 func TestBuildLogsReportsTheWholeLog(t *testing.T) {
-	stub := logsStub(t, buildLog)
+	stub := logsStub(t, buildLogEntries)
 
 	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -288,37 +287,68 @@ func TestBuildLogsReportsTheWholeLog(t *testing.T) {
 	if outcome.Result.Schema != BuildLogsSchema || field(outcome, "lines") != "3" {
 		t.Errorf("result = %+v", outcome.Result.Fields)
 	}
-	if log := field(outcome, "log"); !strings.HasPrefix(log, "2026-10-27T09:00:01Z cloning") ||
-		!strings.HasSuffix(log, "error: missing module") {
-		t.Errorf("log = %q, want every line without a trailing newline", log)
+	want := "2026-10-27T09:00:01Z cloning\n2026-10-27T09:01:00Z compiling\n2026-10-27T09:04:00Z error: missing module"
+	if log := field(outcome, "log"); log != want {
+		t.Errorf("log = %q, want %q", log, want)
 	}
 	assertEndsWithNext(t, outcome)
 }
 
-func TestBuildLogsTailKeepsTheLastLines(t *testing.T) {
-	stub := logsStub(t, buildLog)
+// A tail asks for the newest lines first and puts them back in order.
+func TestBuildLogsTailAsksForTheNewestLines(t *testing.T) {
+	stub := logsStub(t, `{"logs":[{"timestamp":"2026-10-27T09:04:00Z","log":"error: missing module"},
+	  {"timestamp":"2026-10-27T09:01:00Z","log":"compiling"}],"total":3}`)
 
-	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1", "--tail", "1"}, stub.endpoint(),
+	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1", "--tail", "2"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
-	if log := field(outcome, "log"); log != "2026-10-27T09:04:00Z error: missing module" {
-		t.Errorf("log = %q, want only the last line", log)
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("build logs failed: %v %v", outcome.Err, outcome.Problem)
 	}
-	if field(outcome, "lines") != "1 of 3" {
-		t.Errorf("lines = %q, want 1 of 3", field(outcome, "lines"))
+	sent := decodeBody(t, stub.body)
+	if sent["sortOrder"] != "desc" || sent["limit"] != float64(2) {
+		t.Errorf("sortOrder %v limit %v, want desc and 2", sent["sortOrder"], sent["limit"])
+	}
+	if log := field(outcome, "log"); log != "2026-10-27T09:01:00Z compiling\n2026-10-27T09:04:00Z error: missing module" {
+		t.Errorf("log = %q, want the two newest lines in order", log)
+	}
+	if field(outcome, "lines") != "2 of 3" {
+		t.Errorf("lines = %q, want 2 of 3", field(outcome, "lines"))
 	}
 }
 
-func TestBuildLogsOfABuildWithNoOutputYetSaysSo(t *testing.T) {
-	stub := logsStub(t, `{"init":{"log":""},"build":{"log":""},"deploy":{"log":""}}`)
+// A running build has no end yet, so the window runs to now.
+func TestBuildLogsOfARunningBuildSearchesUpToNow(t *testing.T) {
+	stub := logsStub(t, `{"logs":[],"total":0}`)
 
 	outcome := run([]string{"build", "logs"}, []string{"order-api", "b2"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("build logs failed: %v %v", outcome.Err, outcome.Problem)
+	}
+	end, err := time.Parse(time.RFC3339, decodeBody(t, stub.body)["endTime"].(string))
+	if err != nil || time.Since(end) > time.Minute {
+		t.Errorf("endTime = %v, want now", end)
+	}
 	if field(outcome, "lines") != "0" || field(outcome, "log") != "-" {
 		t.Errorf("result = %+v, want no lines", outcome.Result.Fields)
 	}
 	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg build show order-api b2") {
 		t.Errorf("next = %q, want it to name build show", next)
+	}
+}
+
+func TestBuildLogsReportsARefusedQuery(t *testing.T) {
+	stub := newPlatformStub(t, map[string]stubRoute{
+		"/components/order-api/builds/b1": {http.StatusOK, `{"name":"b1","startedAt":"2026-10-27T09:00:00Z"}`},
+		"POST " + logsQueryPath:           {http.StatusBadGateway, `{"error":"Bad Gateway","message":"backend unavailable"}`},
+	})
+
+	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1"}, stub.endpoint(), &testkit.Access{Token: "t"})
+
+	assertProblem(t, outcome, "intg.call_failed", problem.CategoryProductService)
+	if !strings.Contains(outcome.Problem.Message, "backend unavailable") {
+		t.Errorf("message = %q, want the service's words", outcome.Problem.Message)
 	}
 }
 
