@@ -56,8 +56,9 @@ type platformStub struct {
 
 // newPlatformStub answers each route under basePath with its canned status and
 // body, and anything else with the 404 the API itself would give. A route is
-// keyed by its path alone, or by "METHOD /path" where one path answers more
-// than one method; the method-qualified key wins.
+// keyed by its path alone, by "METHOD /path" where one path answers more than
+// one method, or by "METHOD /path?query" where one path answers more than one
+// query; the most specific key wins.
 func newPlatformStub(t *testing.T, routes map[string]stubRoute) *platformStub {
 	t.Helper()
 	return newStubAt(t, basePath, routes)
@@ -75,7 +76,10 @@ func newStubAt(t *testing.T, prefix string, routes map[string]stubRoute) *platfo
 		stub.body, _ = io.ReadAll(r.Body)
 		stub.presented = r.Header.Get("Authorization")
 		relative := strings.TrimPrefix(r.URL.EscapedPath(), prefix)
-		route, found := routes[r.Method+" "+relative]
+		route, found := routes[r.Method+" "+relative+"?"+r.URL.RawQuery]
+		if !found {
+			route, found = routes[r.Method+" "+relative]
+		}
 		if !found {
 			route, found = routes[relative]
 		}

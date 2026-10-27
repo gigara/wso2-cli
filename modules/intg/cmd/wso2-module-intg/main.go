@@ -206,6 +206,70 @@ func commands() *cobratree.Tree {
 	buildCommand.AddCommand(buildRunCommand, buildListCommand, buildShowCommand, buildLogsCommand)
 	root.AddCommand(buildCommand)
 
+	componentDeployCommand := &cobra.Command{
+		Use:   "deploy <component>",
+		Short: "Deploy a component where its project's pipeline starts.",
+	}
+	deployFlags := &componentDeployFlags{}
+	componentDeployCommand.Flags().StringVar(&deployFlags.env, "env", "", "The environment to deploy to. Required.")
+	componentDeployCommand.Flags().StringVar(&deployFlags.build, "build", "",
+		"A succeeded build whose image to deploy. Defaults to the component's current image.")
+	componentDeployCommand.Flags().StringVar(&deployFlags.project, "project", "",
+		"The project the component is in. Defaults to the one the component listing reports.")
+	componentPromoteCommand := &cobra.Command{
+		Use:   "promote <component>",
+		Short: "Promote what runs in one environment to the next, along the project's pipeline.",
+	}
+	promoteFlags := &componentPromoteFlags{}
+	componentPromoteCommand.Flags().StringVar(&promoteFlags.from, "from", "",
+		"The environment whose running release to promote. Required.")
+	componentPromoteCommand.Flags().StringVar(&promoteFlags.to, "to", "", "The environment to promote into. Required.")
+	componentPromoteCommand.Flags().StringVar(&promoteFlags.project, "project", "",
+		"The project the component is in. Defaults to the one the component listing reports.")
+	componentStopCommand := &cobra.Command{
+		Use:   "stop <component>",
+		Short: "Stop a component in one environment, keeping its deployment.",
+	}
+	stopFlags := &environmentFlag{}
+	componentStopCommand.Flags().StringVar(&stopFlags.env, "env", "", "The environment to stop it in. Required.")
+	componentRedeployCommand := &cobra.Command{
+		Use:   "redeploy <component>",
+		Short: "Restart what a component runs in one environment, or start it again after a stop.",
+	}
+	redeployFlags := &environmentFlag{}
+	componentRedeployCommand.Flags().StringVar(&redeployFlags.env, "env", "",
+		"The environment to redeploy it in. Required.")
+	componentCommand.AddCommand(componentDeployCommand, componentPromoteCommand, componentStopCommand,
+		componentRedeployCommand)
+
+	environmentCommand := &cobra.Command{
+		Use:   "environment",
+		Short: "See the organization's deployment environments.",
+	}
+	environmentListCommand := &cobra.Command{
+		Use:   "list",
+		Short: "List the organization's environments.",
+	}
+	environmentCommand.AddCommand(environmentListCommand)
+	root.AddCommand(environmentCommand)
+
+	deploymentCommand := &cobra.Command{
+		Use:   "deployment",
+		Short: "See what a component runs in each environment.",
+	}
+	deploymentListCommand := &cobra.Command{
+		Use:   "list <component>",
+		Short: "List what a component runs in every environment.",
+	}
+	deploymentShowCommand := &cobra.Command{
+		Use:   "show <component>",
+		Short: "Show what a component runs in one environment.",
+	}
+	showDeploymentFlags := &environmentFlag{}
+	deploymentShowCommand.Flags().StringVar(&showDeploymentFlags.env, "env", "", "The environment to show. Required.")
+	deploymentCommand.AddCommand(deploymentListCommand, deploymentShowCommand)
+	root.AddCommand(deploymentCommand)
+
 	return cobratree.New(root).
 		Handle(statusCommand, status).
 		Handle(projectListCommand, projectList(projectListCommand)).
@@ -219,7 +283,14 @@ func commands() *cobratree.Tree {
 		Handle(buildRunCommand, buildRun(buildRunCommand, buildRunFlagsValue)).
 		Handle(buildListCommand, buildList(buildListCommand)).
 		Handle(buildShowCommand, buildShow(buildShowCommand)).
-		Handle(buildLogsCommand, buildLogs(buildLogsCommand, buildLogsFlagsValue))
+		Handle(buildLogsCommand, buildLogs(buildLogsCommand, buildLogsFlagsValue)).
+		Handle(componentDeployCommand, componentDeploy(componentDeployCommand, deployFlags)).
+		Handle(componentPromoteCommand, componentPromote(componentPromoteCommand, promoteFlags)).
+		Handle(componentStopCommand, componentStop(componentStopCommand, stopFlags)).
+		Handle(componentRedeployCommand, componentRedeploy(componentRedeployCommand, redeployFlags)).
+		Handle(environmentListCommand, environmentList(environmentListCommand)).
+		Handle(deploymentListCommand, deploymentList(deploymentListCommand)).
+		Handle(deploymentShowCommand, deploymentShow(deploymentShowCommand, showDeploymentFlags))
 }
 
 // status answers "wso2 intg status".

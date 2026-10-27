@@ -78,6 +78,11 @@ func (c Client) Post(ctx context.Context, path string, body, out any) error {
 	return c.do(ctx, http.MethodPost, path, body, out)
 }
 
+// Put replaces or changes one resource from body, reading the answer into out.
+func (c Client) Put(ctx context.Context, path string, body, out any) error {
+	return c.do(ctx, http.MethodPut, path, body, out)
+}
+
 // Delete removes one resource. The API answers 204 with no body, so there is
 // nothing to read.
 func (c Client) Delete(ctx context.Context, path string) error {
