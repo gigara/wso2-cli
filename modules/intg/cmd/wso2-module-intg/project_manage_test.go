@@ -254,7 +254,7 @@ func TestProjectDeleteReportsThatDeletionContinues(t *testing.T) {
 	if stub.method != http.MethodDelete || stub.path != basePath+"/projects/orders" {
 		t.Errorf("the API was called with %s %s", stub.method, stub.path)
 	}
-	if outcome.Result.Schema != RemovalSchema || field(outcome, "project") != "orders" ||
+	if outcome.Result.Schema != ProjectRemovalSchema || field(outcome, "project") != "orders" ||
 		field(outcome, "state") != "deleting" {
 		t.Errorf("result = %+v, want the project reported as deleting", outcome.Result)
 	}

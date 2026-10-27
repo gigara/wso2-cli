@@ -46,6 +46,8 @@ type platformStub struct {
 	*httptest.Server
 	method    string
 	path      string
+	query     string
+	paths     []string
 	body      []byte
 	presented string
 	calls     int
@@ -60,7 +62,8 @@ func newPlatformStub(t *testing.T, routes map[string]stubRoute) *platformStub {
 	stub := &platformStub{}
 	stub.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		stub.calls++
-		stub.method, stub.path = r.Method, r.URL.EscapedPath()
+		stub.method, stub.path, stub.query = r.Method, r.URL.EscapedPath(), r.URL.RawQuery
+		stub.paths = append(stub.paths, r.Method+" "+r.URL.EscapedPath())
 		stub.body, _ = io.ReadAll(r.Body)
 		stub.presented = r.Header.Get("Authorization")
 		relative := strings.TrimPrefix(r.URL.EscapedPath(), basePath)

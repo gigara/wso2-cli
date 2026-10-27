@@ -142,12 +142,51 @@ func commands() *cobratree.Tree {
 	projectCommand.AddCommand(projectListCommand, projectShowCommand, projectCreateCommand, projectDeleteCommand)
 	root.AddCommand(projectCommand)
 
+	componentCommand := &cobra.Command{
+		Use:   "component",
+		Short: "Work with the integrations in a project.",
+	}
+	componentListCommand := &cobra.Command{
+		Use:   "list",
+		Short: "List the components of a project, or of every project.",
+	}
+	listFlags := &projectFlag{}
+	listFlags.bind(componentListCommand, "The project to list. Defaults to every project.")
+	componentShowCommand := &cobra.Command{
+		Use:   "show <component>",
+		Short: "Show one component and its source repository.",
+	}
+	showFlags := &projectFlag{}
+	showFlags.bind(componentShowCommand, "The project to look in. Defaults to every project.")
+	componentCreateCommand := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Create a component that builds from a public git repository.",
+	}
+	componentCreateFlagsValue := &componentCreateFlags{}
+	componentCreateFlagsValue.bind(componentCreateCommand)
+	componentDeleteCommand := &cobra.Command{
+		Use:   "delete <component>",
+		Short: "Delete a component.",
+	}
+	componentDeleteFlagsValue := &componentDeleteFlags{}
+	componentDeleteFlagsValue.bind(componentDeleteCommand,
+		"The project the component is in. Defaults to the one the platform records.")
+	componentDeleteCommand.Flags().BoolVar(&componentDeleteFlagsValue.yes, "yes", false,
+		"Confirm the deletion. Without it nothing is deleted.")
+	componentCommand.AddCommand(componentListCommand, componentShowCommand, componentCreateCommand,
+		componentDeleteCommand)
+	root.AddCommand(componentCommand)
+
 	return cobratree.New(root).
 		Handle(statusCommand, status).
 		Handle(projectListCommand, projectList(projectListCommand)).
 		Handle(projectShowCommand, projectShow(projectShowCommand)).
 		Handle(projectCreateCommand, projectCreate(projectCreateCommand, createFlags)).
-		Handle(projectDeleteCommand, projectDelete(projectDeleteCommand, deleteFlags))
+		Handle(projectDeleteCommand, projectDelete(projectDeleteCommand, deleteFlags)).
+		Handle(componentListCommand, componentList(componentListCommand, listFlags)).
+		Handle(componentShowCommand, componentShow(componentShowCommand, showFlags)).
+		Handle(componentCreateCommand, componentCreate(componentCreateCommand, componentCreateFlagsValue)).
+		Handle(componentDeleteCommand, componentDelete(componentDeleteCommand, componentDeleteFlagsValue))
 }
 
 // status answers "wso2 intg status".

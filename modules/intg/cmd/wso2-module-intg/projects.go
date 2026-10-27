@@ -37,8 +37,8 @@ const ProjectsSchema = "intg.projects/v1"
 // report it.
 const ProjectSchema = "intg.project/v1"
 
-// RemovalSchema identifies an accepted delete.
-const RemovalSchema = "intg.removal/v1"
+// ProjectRemovalSchema identifies an accepted project delete.
+const ProjectRemovalSchema = "intg.projectRemoval/v1"
 
 // project is the part of the API's Project this module reports. The API
 // addresses projects by resource name, so id is what every other command
@@ -347,7 +347,7 @@ func projectDelete(command *cobra.Command, flags *removalFlags) module.Handler {
 			return result.Result{}, callFailedNaming(err, "delete the project "+name, request.Context.Endpoint,
 				projectNotFoundRecovery)
 		}
-		return result.New(RemovalSchema).
+		return result.New(ProjectRemovalSchema).
 			With("project", "Project", name).
 			With("state", "State", "deleting").
 			With(NextField, "Next", "Deletion continues in the background. Run wso2 intg project list "+
