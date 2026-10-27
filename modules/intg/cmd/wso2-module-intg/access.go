@@ -124,6 +124,16 @@ func exactlyOneArgument(positional []string, message, recovery string) (string, 
 	}
 }
 
+// exactlyTwoArguments proves a command line names exactly two positional
+// arguments, refusing any other count with message.
+func exactlyTwoArguments(positional []string, message, recovery string) (string, string, error) {
+	if len(positional) != 2 {
+		return "", "", usageProblem(fmt.Sprintf("%s: this command takes two arguments, and was given %d",
+			message, len(positional)), recovery)
+	}
+	return positional[0], positional[1], nil
+}
+
 // noArguments refuses a command line that names positional arguments the
 // command does not take.
 func noArguments(positional []string, recovery string) error {

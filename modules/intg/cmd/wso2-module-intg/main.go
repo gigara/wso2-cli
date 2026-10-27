@@ -177,6 +177,35 @@ func commands() *cobratree.Tree {
 		componentDeleteCommand)
 	root.AddCommand(componentCommand)
 
+	buildCommand := &cobra.Command{
+		Use:   "build",
+		Short: "Start builds of a component and read their status and logs.",
+	}
+	buildRunCommand := &cobra.Command{
+		Use:   "run <component>",
+		Short: "Start a build of a component.",
+	}
+	buildRunFlagsValue := &buildRunFlags{}
+	buildRunCommand.Flags().StringVar(&buildRunFlagsValue.commit, "commit", "",
+		"The full 40-character commit SHA to build. Defaults to the head of the component's branch.")
+	buildListCommand := &cobra.Command{
+		Use:   "list <component>",
+		Short: "List a component's recent builds, newest first.",
+	}
+	buildShowCommand := &cobra.Command{
+		Use:   "show <component> <build>",
+		Short: "Show one build's status, commit, image and steps.",
+	}
+	buildLogsCommand := &cobra.Command{
+		Use:   "logs <component> <build>",
+		Short: "Show one build's log.",
+	}
+	buildLogsFlagsValue := &buildLogsFlags{}
+	buildLogsCommand.Flags().IntVar(&buildLogsFlagsValue.tail, "tail", 0,
+		"Show only the last this many lines. Defaults to the whole log.")
+	buildCommand.AddCommand(buildRunCommand, buildListCommand, buildShowCommand, buildLogsCommand)
+	root.AddCommand(buildCommand)
+
 	return cobratree.New(root).
 		Handle(statusCommand, status).
 		Handle(projectListCommand, projectList(projectListCommand)).
@@ -186,7 +215,11 @@ func commands() *cobratree.Tree {
 		Handle(componentListCommand, componentList(componentListCommand, listFlags)).
 		Handle(componentShowCommand, componentShow(componentShowCommand, showFlags)).
 		Handle(componentCreateCommand, componentCreate(componentCreateCommand, componentCreateFlagsValue)).
-		Handle(componentDeleteCommand, componentDelete(componentDeleteCommand, componentDeleteFlagsValue))
+		Handle(componentDeleteCommand, componentDelete(componentDeleteCommand, componentDeleteFlagsValue)).
+		Handle(buildRunCommand, buildRun(buildRunCommand, buildRunFlagsValue)).
+		Handle(buildListCommand, buildList(buildListCommand)).
+		Handle(buildShowCommand, buildShow(buildShowCommand)).
+		Handle(buildLogsCommand, buildLogs(buildLogsCommand, buildLogsFlagsValue))
 }
 
 // status answers "wso2 intg status".
