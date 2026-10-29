@@ -18,6 +18,7 @@ package auth_test
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -82,6 +83,27 @@ func (d exchangeDeployment) broker(t *testing.T) *auth.Broker {
 	broker.HTTPClient = d.issuer.HTTPClient()
 	broker.Now = nil
 	return broker
+}
+
+// On a ThunderID context whose products are all reached by exchange, the
+// login session names no resource, and an exchanged product is still answered
+// from it with a token bound to the product's own resource.
+func TestAThunderLoginSessionWithNoResourceIsExchangedForTheProductsResource(t *testing.T) {
+	deployment := seedExchangeDeployment(t, fakeissuer.Options{})
+	broker := deployment.broker(t)
+	broker.Selection.Identity.Auth.Provider = contexts.ProviderThunder
+
+	grant, err := broker.Acquire(declaredRequest())
+	if err != nil {
+		t.Fatalf("Acquire returned %v", err)
+	}
+	active, _, audience := deployment.issuer.Introspect(t, grant.Token)
+	if !active {
+		t.Fatal("the exchanged token is not active")
+	}
+	if !slices.Contains(audience, exchangedAudience) {
+		t.Errorf("the exchanged token is bound to %v, want %q", audience, exchangedAudience)
+	}
 }
 
 func TestAnExchangedProductIsAnsweredWithoutASessionOfItsOwn(t *testing.T) {

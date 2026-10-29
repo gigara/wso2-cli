@@ -330,15 +330,36 @@ func withoutExchanged(accesses []contexts.ProductAccess) []contexts.ProductAcces
 // deployment that binds a login to one protected resource, RFC 8707 gives it
 // nothing to name, and sending the authorization anyway would ask an issuer
 // that requires a resource indicator for one this identity cannot supply.
+//
+// A context whose products are all reached by exchange is the exception. Its
+// login session is never presented to a product: each command exchanges it
+// for a token bound to the product's own resource, named on the exchange
+// request, so the login has no resource of its own to name. WSO2 Cloud's
+// ThunderID registers its CLI client this way, and accepts a login that names
+// none. An issuer that does require one still refuses the authorization with
+// invalid_target, which the login reports as this same code.
 func checkLoginAccessBinds(identity contexts.Account) error {
 	if identity.Auth.Derivation() != contexts.DerivationTokenResource ||
-		len(identity.Products) == 0 || identity.LoginAccess().Namespace != "" {
+		len(identity.Products) == 0 || identity.LoginAccess().Namespace != "" ||
+		everyProductExchanged(identity) {
 		return nil
 	}
 	return problem.New(problem.CategoryAuthPolicy, "auth.product_not_configured",
 		fmt.Sprintf("the %q context records no product its login can bind to; every product it "+
 			"records is reached by a grant", identity.Name)).
 		WithRecovery("Record a direct product with wso2 context product add <product> --url <url>, then run wso2 login.")
+}
+
+// everyProductExchanged reports whether each product the identity records is
+// reached by exchanging the login session, and none by a grant that needs a
+// session or an issuer of its own.
+func everyProductExchanged(identity contexts.Account) bool {
+	for _, product := range identity.Products {
+		if product.Grant == nil || product.Grant.Kind != contexts.GrantExchange {
+			return false
+		}
+	}
+	return true
 }
 
 // checkDerivedResource refuses to open a browser for a derived access this
