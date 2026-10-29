@@ -290,18 +290,85 @@ func (b build) logWindow(now time.Time) (time.Time, time.Time) {
 	return start.Add(-logWindowMargin), end
 }
 
+// requireObservability refuses a command that reads logs when the context
+// records no observability proxy, before anything is asked of the shell.
+func requireObservability(request module.Request) error {
+	if request.Context.GatewayEndpoint != "" {
+		return nil
+	}
+	return problem.New(problem.CategoryAuthPolicy, "intg.observability_not_recorded",
+		"the selected context records no observability URL for the intg product, so logs have nowhere to be "+
+			"read from").
+		WithRecovery("Run wso2 context product add intg --url <integration platform API URL> --gateway " +
+			"<observability URL> --replace to record it, then run this command again.")
+}
+
+// queryLogs runs one log query against the observability proxy for scope,
+// between start and end, and returns the lines oldest first with the total
+// the proxy matched. A tail below the limit asks for the newest lines first,
+// so a long log is not cut off before its end, and puts them back in order.
+//
+// The proxy sets searchScope.namespace from the token's organization, so the
+// member is sent empty. It is presented the token the API is called with: it
+// verifies the token's signature and organization claims, and checks no
+// audience.
+func queryLogs(ctx context.Context, request module.Request, token string, scope map[string]string,
+	start, end time.Time, tail int, attempted string) ([]string, int, error) {
+	order, limit := "asc", logsQueryLimit
+	if tail > 0 && tail < logsQueryLimit {
+		order, limit = "desc", tail
+	}
+	searchScope := map[string]string{"namespace": ""}
+	for key, value := range scope {
+		searchScope[key] = value
+	}
+	query := map[string]any{
+		"searchScope": searchScope,
+		"startTime":   start.UTC().Format(time.RFC3339),
+		"endTime":     end.UTC().Format(time.RFC3339),
+		"limit":       limit,
+		"sortOrder":   order,
+	}
+	var answer struct {
+		Logs []struct {
+			Timestamp string `json:"timestamp"`
+			Log       string `json:"log"`
+		} `json:"logs"`
+		Total int `json:"total"`
+	}
+	observability := platform.Client{Endpoint: request.Context.GatewayEndpoint, Token: token}
+	if err := observability.Post(ctx, logsQueryPath, query, &answer); err != nil {
+		return nil, 0, callFailed(err, attempted, request.Context.GatewayEndpoint)
+	}
+	lines := make([]string, len(answer.Logs))
+	for i, entry := range answer.Logs {
+		line := strings.TrimRight(entry.Log, "\n")
+		if entry.Timestamp != "" {
+			line = entry.Timestamp + " " + line
+		}
+		lines[i] = line
+	}
+	if order == "desc" {
+		slices.Reverse(lines)
+	}
+	return lines, answer.Total, nil
+}
+
+// lineCount is how many lines a log result shows, and of how many when the
+// proxy matched more.
+func lineCount(shown, total int) string {
+	count := strconv.Itoa(shown)
+	if total > shown {
+		count += " of " + strconv.Itoa(total)
+	}
+	return count
+}
+
 // buildLogs answers "wso2 intg build logs <component> <build> [--tail <n>]".
 //
 // The build is read first, which confirms it exists and bounds the search to
 // its run. The log is then queried from the observability proxy, recorded on
-// the context as the product's gateway, as the workflow run of that name. The
-// proxy sets searchScope.namespace from the token's organization, so the
-// member is sent empty.
-//
-// The proxy is presented the token the API is called with. It verifies the
-// token's signature and organization claims, and checks no audience, so no
-// second exchange is needed; a resource server of the proxy's own would let
-// it have a token bound to it instead.
+// the context as the product's gateway, as the workflow run of that name.
 func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
 		componentID, buildName, err := exactlyTwoArguments(command.Flags().Args(),
@@ -313,12 +380,8 @@ func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 			return result.Result{}, usageProblem("--tail "+strconv.Itoa(flags.tail)+" is not a number of lines",
 				"Give --tail a positive number, or leave it out to see the whole log.")
 		}
-		if request.Context.GatewayEndpoint == "" {
-			return result.Result{}, problem.New(problem.CategoryAuthPolicy, "intg.observability_not_recorded",
-				"the selected context records no observability URL for the intg product, so build logs have "+
-					"nowhere to be read from").
-				WithRecovery("Run wso2 context product add intg --url <integration platform API URL> --gateway " +
-					"<observability URL> --replace to record it, then run this command again.")
+		if err := requireObservability(request); err != nil {
+			return result.Result{}, err
 		}
 		client, err := clientFor(ctx, request)
 		if err != nil {
@@ -330,45 +393,10 @@ func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 				request.Context.Endpoint, componentID)
 		}
 		start, end := found.logWindow(time.Now().UTC())
-		// The newest lines are asked for first when only a tail is wanted, so
-		// a long log is not cut off at the limit before its end is reached.
-		order, limit := "asc", logsQueryLimit
-		if flags.tail > 0 && flags.tail < logsQueryLimit {
-			order, limit = "desc", flags.tail
-		}
-		query := map[string]any{
-			"searchScope": map[string]string{"namespace": "", "workflowRunName": buildName},
-			"startTime":   start.Format(time.RFC3339),
-			"endTime":     end.Format(time.RFC3339),
-			"limit":       limit,
-			"sortOrder":   order,
-		}
-		var answer struct {
-			Logs []struct {
-				Timestamp string `json:"timestamp"`
-				Log       string `json:"log"`
-			} `json:"logs"`
-			Total int `json:"total"`
-		}
-		observability := platform.Client{Endpoint: request.Context.GatewayEndpoint, Token: client.Token}
-		if err := observability.Post(ctx, logsQueryPath, query, &answer); err != nil {
-			return result.Result{}, callFailed(err, "read the log of the build "+buildName+" of "+componentID,
-				request.Context.GatewayEndpoint)
-		}
-		lines := make([]string, len(answer.Logs))
-		for i, entry := range answer.Logs {
-			line := strings.TrimRight(entry.Log, "\n")
-			if entry.Timestamp != "" {
-				line = entry.Timestamp + " " + line
-			}
-			lines[i] = line
-		}
-		if order == "desc" {
-			slices.Reverse(lines)
-		}
-		count := strconv.Itoa(len(lines))
-		if answer.Total > len(lines) {
-			count += " of " + strconv.Itoa(answer.Total)
+		lines, total, err := queryLogs(ctx, request, client.Token, map[string]string{"workflowRunName": buildName},
+			start, end, flags.tail, "read the log of the build "+buildName+" of "+componentID)
+		if err != nil {
+			return result.Result{}, err
 		}
 		next := "Run wso2 intg build show " + componentID + " " + buildName + " to see its status."
 		if len(lines) == 0 {
@@ -378,7 +406,7 @@ func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 		return result.New(BuildLogsSchema).
 			With("build", "Build", buildName).
 			With("component", "Component", componentID).
-			With("lines", "Lines", count).
+			With("lines", "Lines", lineCount(len(lines), total)).
 			With("log", "Log", orDash(strings.Join(lines, "\n"))).
 			With(NextField, "Next", next), nil
 	}

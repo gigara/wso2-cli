@@ -103,6 +103,7 @@ resource. `dev/` holds a kit that builds and records all of this locally.
 | `wso2 intg component promote <component> --from <environment> --to <environment> [--project <project>]` | Promotes the release running in one environment to another along the project's pipeline, looking up the release and the pipeline itself. Nothing deployed in `--from` is `intg.not_deployed`; a hop the pipeline refuses is `intg.promotion_refused`. |
 | `wso2 intg component stop <component> --env <environment>` | Stops the component in one environment, keeping its deployment. |
 | `wso2 intg component redeploy <component> --env <environment>` | Restarts the release deployed in one environment, or starts it again after a stop. |
+| `wso2 intg component logs <component> --env <environment> [--since <duration>] [--tail <n>] [--project <project>]` | Shows what a component logs in one environment: the newest 100 lines of the last hour unless `--since` and `--tail` say otherwise, oldest first. `--tail 0` shows every line in the window, up to 1000. It is the observability proxy's log query, scoped to the component, its project and the environment, the same query build logs uses for a build. |
 
 Every failure keeps the API's own words. A missing product URL is
 `intg.product_not_recorded`; 401 and 403 are `intg.not_authorized`; 402 is

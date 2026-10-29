@@ -239,8 +239,21 @@ func commands() *cobratree.Tree {
 	redeployFlags := &environmentFlag{}
 	componentRedeployCommand.Flags().StringVar(&redeployFlags.env, "env", "",
 		"The environment to redeploy it in. Required.")
+	componentLogsCommand := &cobra.Command{
+		Use:   "logs <component>",
+		Short: "Show what a component logs in one environment.",
+	}
+	componentLogsFlagsValue := &componentLogsFlags{}
+	componentLogsCommand.Flags().StringVar(&componentLogsFlagsValue.env, "env", "",
+		"The environment to read its logs in. Required.")
+	componentLogsCommand.Flags().StringVar(&componentLogsFlagsValue.since, "since", "1h",
+		"How far back to look, such as 15m or 24h. Defaults to 1h.")
+	componentLogsCommand.Flags().IntVar(&componentLogsFlagsValue.tail, "tail", defaultLogTail,
+		"Show only the newest this many lines, 100 unless given; 0 shows every line in the window, up to 1000.")
+	componentLogsCommand.Flags().StringVar(&componentLogsFlagsValue.project, "project", "",
+		"The project the component is in. Defaults to the one the component listing reports.")
 	componentCommand.AddCommand(componentDeployCommand, componentPromoteCommand, componentStopCommand,
-		componentRedeployCommand)
+		componentRedeployCommand, componentLogsCommand)
 
 	environmentCommand := &cobra.Command{
 		Use:   "environment",
@@ -290,7 +303,8 @@ func commands() *cobratree.Tree {
 		Handle(componentRedeployCommand, componentRedeploy(componentRedeployCommand, redeployFlags)).
 		Handle(environmentListCommand, environmentList(environmentListCommand)).
 		Handle(deploymentListCommand, deploymentList(deploymentListCommand)).
-		Handle(deploymentShowCommand, deploymentShow(deploymentShowCommand, showDeploymentFlags))
+		Handle(deploymentShowCommand, deploymentShow(deploymentShowCommand, showDeploymentFlags)).
+		Handle(componentLogsCommand, componentLogs(componentLogsCommand, componentLogsFlagsValue))
 }
 
 // status answers "wso2 intg status".
