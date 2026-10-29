@@ -205,6 +205,7 @@ func (s Session) sendInvoke(writer *protocol.Writer, invocation Invocation) erro
 				OrganizationId:  invocation.Context.OrganizationID,
 				Endpoint:        invocation.Context.Endpoint,
 				GatewayEndpoint: invocation.Context.GatewayEndpoint,
+				Project:         invocation.Context.Project,
 			},
 		}},
 	})
