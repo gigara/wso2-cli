@@ -185,16 +185,11 @@ func (s Shell) invokeModule(namespace string, resolved modules.Resolved, args []
 		launcher.Environment = []string{NoInputEnvVar + "=1"}
 	}
 	outcome, invokeErr := launcher.Invoke(context.Background(), rpc.Invocation{
-		Namespace:  namespace,
-		Command:    command,
-		Arguments:  arguments,
-		OutputMode: contractOutputMode(mode),
-		Context: rpc.InvocationContext{
-			Name:            selection.Context.Name,
-			OrganizationID:  selection.Context.Organization,
-			Endpoint:        selection.Identity.Products[namespace].Endpoint,
-			GatewayEndpoint: gatewayEndpoint(selection.Identity, namespace),
-		},
+		Namespace:   namespace,
+		Command:     command,
+		Arguments:   arguments,
+		OutputMode:  contractOutputMode(mode),
+		Context:     invocationContext(selection, namespace),
 		Interactive: false,
 	})
 
@@ -392,4 +387,17 @@ func credentialVariables(identity contexts.Account) []string {
 		}
 	}
 	return names
+}
+
+// invocationContext is what a module is told about the selected context: its
+// name, organization and project, and where the product and its gateway are.
+// Every member is a location or a default, never a permission.
+func invocationContext(selection contexts.Selection, namespace string) rpc.InvocationContext {
+	return rpc.InvocationContext{
+		Name:            selection.Context.Name,
+		OrganizationID:  selection.Context.Organization,
+		Endpoint:        selection.Identity.Products[namespace].Endpoint,
+		GatewayEndpoint: gatewayEndpoint(selection.Identity, namespace),
+		Project:         selection.Context.Project,
+	}
 }
