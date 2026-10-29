@@ -247,7 +247,7 @@ func componentList(command *cobra.Command, flags *projectFlag) module.Handler {
 		if err != nil {
 			return result.Result{}, err
 		}
-		found, err := componentsOf(ctx, client, flags.project, request.Context.Endpoint)
+		found, err := componentsOf(ctx, client, projectOf(flags.project, request), request.Context.Endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -325,11 +325,11 @@ func componentShow(command *cobra.Command, flags *projectFlag) module.Handler {
 		if err != nil {
 			return result.Result{}, err
 		}
-		found, err := componentsOf(ctx, client, flags.project, request.Context.Endpoint)
+		found, err := componentsOf(ctx, client, projectOf(flags.project, request), request.Context.Endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
-		c, err := findComponent(found, ref, flags.project)
+		c, err := findComponent(found, ref, projectOf(flags.project, request))
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -376,7 +376,8 @@ type componentCreateFlags struct {
 
 func (f *componentCreateFlags) bind(command *cobra.Command) {
 	flags := command.Flags()
-	flags.StringVar(&f.project, "project", "", "The project to create it in. Required.")
+	flags.StringVar(&f.project, "project", "", "The project to create it in. Defaults to the context's project; "+
+		"required when the context names none.")
 	flags.StringVar(&f.kind, "type", "", "What it is: "+strings.Join(slices.Sorted(maps.Keys(componentTypes)), ", ")+
 		". Required.")
 	flags.StringVar(&f.runtime, "runtime", "", "What its source is built with: "+
@@ -394,7 +395,7 @@ func (f *componentCreateFlags) bind(command *cobra.Command) {
 // exactly as the platform's own create_integration tool does. autoBuild is
 // always set: it starts the first build, without which a new component has
 // nothing to deploy.
-func (f *componentCreateFlags) createRequest(name string) (map[string]any, error) {
+func (f *componentCreateFlags) createRequest(name, project string) (map[string]any, error) {
 	recovery := "Run wso2 intg component create <name> --project <project> --type <type> --runtime <runtime> " +
 		"--repo <url> --branch <branch>."
 	if !componentName.MatchString(name) {
@@ -403,9 +404,13 @@ func (f *componentCreateFlags) createRequest(name string) (map[string]any, error
 	}
 	// In a fixed order, so the same command line always names the same flag.
 	for _, required := range []struct{ flag, value string }{
-		{"--project", f.project}, {"--type", f.kind}, {"--runtime", f.runtime}, {"--repo", f.repo},
+		{"--project", project}, {"--type", f.kind}, {"--runtime", f.runtime}, {"--repo", f.repo},
 		{"--branch", f.branch},
 	} {
+		if required.value == "" && required.flag == "--project" {
+			return nil, usageProblem("--project is required, since the selected context names no project",
+				recovery+" Or record a project on the context, which every command then defaults to.")
+		}
 		if required.value == "" {
 			return nil, usageProblem(required.flag+" is required", recovery)
 		}
@@ -438,7 +443,7 @@ func (f *componentCreateFlags) createRequest(name string) (map[string]any, error
 	return map[string]any{
 		"metadata": map[string]any{"name": name, "annotations": annotations},
 		"spec": map[string]any{
-			"owner":         map[string]string{"projectName": f.project},
+			"owner":         map[string]string{"projectName": project},
 			"componentType": map[string]string{"name": componentType},
 			"autoBuild":     true,
 			"autoDeploy":    f.autoDeploy,
@@ -460,7 +465,8 @@ func componentCreate(command *cobra.Command, flags *componentCreateFlags) module
 		if err != nil {
 			return result.Result{}, err
 		}
-		body, err := flags.createRequest(name)
+		project := projectOf(flags.project, request)
+		body, err := flags.createRequest(name, project)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -469,14 +475,14 @@ func componentCreate(command *cobra.Command, flags *componentCreateFlags) module
 			return result.Result{}, err
 		}
 		var created component
-		if err := client.Post(ctx, projectComponentsPath(flags.project), body, &created); err != nil {
+		if err := client.Post(ctx, projectComponentsPath(project), body, &created); err != nil {
 			return result.Result{}, componentCreateFailed(err, name, request.Context.Endpoint)
 		}
 		if created.ID == "" {
 			created.ID = name
 		}
 		if created.Project == "" {
-			created.Project = flags.project
+			created.Project = project
 		}
 		// Component names are unique across the organization, and the
 		// platform suffixes a taken one rather than refusing it.
@@ -537,9 +543,10 @@ func componentDelete(command *cobra.Command, flags *componentDeleteFlags) module
 		if err != nil {
 			return result.Result{}, err
 		}
-		if err := client.Delete(ctx, withProject(componentPath(id), flags.project)); err != nil {
+		project := projectOf(flags.project, request)
+		if err := client.Delete(ctx, withProject(componentPath(id), project)); err != nil {
 			return result.Result{}, callFailedNaming(err, "delete the component "+id, request.Context.Endpoint,
-				componentListRecovery(flags.project))
+				componentListRecovery(project))
 		}
 		return result.New(ComponentRemovalSchema).
 			With("component", "Component", id).

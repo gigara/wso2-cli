@@ -63,6 +63,13 @@ contexts:
           url: https://cloud-obs-proxy.obs.dp.dev.cloud.wso2.com/wso2cloud-obs
 ```
 
+A context may also record a project (`project: <id>` in a context file, or
+`ws context create --project`). Every command that takes `--project` defaults
+to it, and the flag still overrides it: `component list` and `component show`
+look in that project rather than every project, `component create` needs no
+`--project`, and `deploy`, `promote`, `logs` and `component delete` skip
+searching the listing for the component's project. `status` reports it.
+
 The gateway is WSO2 Cloud's observability proxy, which build logs are read
 from. It is presented the same exchanged token as the API: it checks the
 token's signature and organization claims, and no audience.

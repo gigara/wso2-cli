@@ -85,7 +85,7 @@ func componentLogs(command *cobra.Command, flags *componentLogsFlags) module.Han
 		if err != nil {
 			return result.Result{}, err
 		}
-		project, err := componentProject(ctx, client, componentID, flags.project, endpoint)
+		project, err := componentProject(ctx, client, componentID, projectOf(flags.project, request), endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}

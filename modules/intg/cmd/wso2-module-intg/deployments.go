@@ -390,7 +390,7 @@ func componentDeploy(command *cobra.Command, flags *componentDeployFlags) module
 		if err != nil {
 			return result.Result{}, err
 		}
-		project, err := componentProject(ctx, client, componentID, flags.project, endpoint)
+		project, err := componentProject(ctx, client, componentID, projectOf(flags.project, request), endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -499,7 +499,7 @@ func componentPromote(command *cobra.Command, flags *componentPromoteFlags) modu
 		if from.ID == to.ID {
 			return result.Result{}, usageProblem("--from and --to both name "+from.ID, recovery)
 		}
-		project, err := componentProject(ctx, client, componentID, flags.project, endpoint)
+		project, err := componentProject(ctx, client, componentID, projectOf(flags.project, request), endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}

@@ -151,13 +151,13 @@ func commands() *cobratree.Tree {
 		Short: "List the components of a project, or of every project.",
 	}
 	listFlags := &projectFlag{}
-	listFlags.bind(componentListCommand, "The project to list. Defaults to every project.")
+	listFlags.bind(componentListCommand, "The project to list. Defaults to the context's project, or every project.")
 	componentShowCommand := &cobra.Command{
 		Use:   "show <component>",
 		Short: "Show one component and its source repository.",
 	}
 	showFlags := &projectFlag{}
-	showFlags.bind(componentShowCommand, "The project to look in. Defaults to every project.")
+	showFlags.bind(componentShowCommand, "The project to look in. Defaults to the context's project, or every project.")
 	componentCreateCommand := &cobra.Command{
 		Use:   "create <name>",
 		Short: "Create a component that builds from a public git repository.",
@@ -170,7 +170,7 @@ func commands() *cobratree.Tree {
 	}
 	componentDeleteFlagsValue := &componentDeleteFlags{}
 	componentDeleteFlagsValue.bind(componentDeleteCommand,
-		"The project the component is in. Defaults to the one the platform records.")
+		"The project the component is in. Defaults to the context's project, or the one the platform records.")
 	componentDeleteCommand.Flags().BoolVar(&componentDeleteFlagsValue.yes, "yes", false,
 		"Confirm the deletion. Without it nothing is deleted.")
 	componentCommand.AddCommand(componentListCommand, componentShowCommand, componentCreateCommand,
@@ -217,7 +217,7 @@ func commands() *cobratree.Tree {
 	componentDeployCommand.Flags().StringVar(&deployFlags.build, "build", "",
 		"A succeeded build whose image to deploy. Defaults to the component's current image.")
 	componentDeployCommand.Flags().StringVar(&deployFlags.project, "project", "",
-		"The project the component is in. Defaults to the one the component listing reports.")
+		"The project the component is in. Defaults to the context's project, or the one the component listing reports.")
 	deployFlags.bind(componentDeployCommand, "the new release is running")
 	cobratree.WithTimeout(componentDeployCommand, waitDeadline)
 	componentPromoteCommand := &cobra.Command{
@@ -229,7 +229,7 @@ func commands() *cobratree.Tree {
 		"The environment whose running release to promote. Required.")
 	componentPromoteCommand.Flags().StringVar(&promoteFlags.to, "to", "", "The environment to promote into. Required.")
 	componentPromoteCommand.Flags().StringVar(&promoteFlags.project, "project", "",
-		"The project the component is in. Defaults to the one the component listing reports.")
+		"The project the component is in. Defaults to the context's project, or the one the component listing reports.")
 	promoteFlags.bind(componentPromoteCommand, "the promoted release is running")
 	cobratree.WithTimeout(componentPromoteCommand, waitDeadline)
 	componentStopCommand := &cobra.Command{
@@ -257,7 +257,7 @@ func commands() *cobratree.Tree {
 	componentLogsCommand.Flags().IntVar(&componentLogsFlagsValue.tail, "tail", defaultLogTail,
 		"Show only the newest this many lines, 100 unless given; 0 shows every line in the window, up to 1000.")
 	componentLogsCommand.Flags().StringVar(&componentLogsFlagsValue.project, "project", "",
-		"The project the component is in. Defaults to the one the component listing reports.")
+		"The project the component is in. Defaults to the context's project, or the one the component listing reports.")
 	componentCommand.AddCommand(componentDeployCommand, componentPromoteCommand, componentStopCommand,
 		componentRedeployCommand, componentLogsCommand)
 
@@ -328,5 +328,6 @@ func status(ctx context.Context, request module.Request) (result.Result, error) 
 		With("namespace", "Namespace", Namespace).
 		With("version", "Version", moduleVersion).
 		With("endpoint", "Endpoint", request.Context.Endpoint).
+		With("project", "Project", orDash(request.Context.Project)).
 		With(NextField, "Next", next), nil
 }

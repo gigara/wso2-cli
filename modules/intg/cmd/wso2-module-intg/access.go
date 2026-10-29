@@ -134,6 +134,15 @@ func exactlyTwoArguments(positional []string, message, recovery string) (string,
 	return positional[0], positional[1], nil
 }
 
+// projectOf is the project a command acts within: the one --project names, or
+// the selected context's when the flag is not given. Either may be empty.
+func projectOf(flag string, request module.Request) string {
+	if flag != "" {
+		return flag
+	}
+	return request.Context.Project
+}
+
 // noArguments refuses a command line that names positional arguments the
 // command does not take.
 func noArguments(positional []string, recovery string) error {

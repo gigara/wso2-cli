@@ -12,6 +12,10 @@
 contexts:
   - name: wso2cloud-dev
     type: cloud
+    # The project intg commands act within unless --project names another.
+    # The platform creates "default" in every organization; change it to work
+    # in another project by default.
+    project: default
     login:
       kind: oauth-browser
       provider: thunder
