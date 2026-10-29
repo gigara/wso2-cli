@@ -45,8 +45,7 @@ so no command takes an organization.
 
 `module.json` declares the product as reached by exchange, so recording it
 needs only its URL, and the audience defaults to that URL. WSO2 Cloud's
-ThunderID names its issuer `platform-idp` rather than its URL, so the context
-declares that as `issuerId`:
+ThunderID names its own URL as its issuer, so the login needs only that URL:
 
 ```yaml
 contexts:
@@ -56,7 +55,6 @@ contexts:
       kind: oauth-browser
       provider: thunder
       issuer: https://platform-idp-development.gateway.dev.cloud.wso2.com
-      issuerId: platform-idp
       clientId: WSO2_CLI
     products:
       intg:

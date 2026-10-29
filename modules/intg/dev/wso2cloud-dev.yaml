@@ -2,8 +2,8 @@
 # environment. Apply with: ws context apply -f wso2cloud-dev.yaml --use wso2cloud-dev
 #
 # It logs in at the WSO2 Cloud ThunderID with the public WSO2_CLI client. The
-# provider names its issuer "platform-idp" rather than its URL, in its
-# discovery document and its tokens, so issuerId declares that name (ADR 0020).
+# provider names its own URL as its issuer since 2026-10-28; before that it
+# named "platform-idp", which needed login.issuerId (ADR 0020).
 #
 # The intg product is reached by exchange, which the module's descriptor fills
 # in: the login names no resource, and each command exchanges the login token
@@ -16,7 +16,6 @@ contexts:
       kind: oauth-browser
       provider: thunder
       issuer: https://platform-idp-development.gateway.dev.cloud.wso2.com
-      issuerId: platform-idp
       clientId: WSO2_CLI
     products:
       intg:
