@@ -39,22 +39,6 @@ module receives it. Build logs are read from WSO2 Cloud's observability proxy,
 which the context records as the product's gateway. An earlier version of this kit also recorded a
 `wso2cloud-dev-direct` workaround context; `setup.sh` deletes it.
 
-## Seeing the tokens (temporary)
-
-`WSO2_DEBUG_TOKENS` makes the `--verbose` log show the tokens an exchange runs
-on: the login access token and the token it is exchanged for.
-
-```sh
-WSO2_DEBUG_TOKENS=claims ./bin/ws intg project list --verbose   # decoded header and claims only
-WSO2_DEBUG_TOKENS=raw ./bin/ws intg project list --verbose      # also the tokens themselves
-```
-
-`claims` is usually enough: issuer, audience, scopes, `client_id`, the `ou*`
-claims and expiry. A `raw` token works as a bearer credential until it expires,
-so don't paste one into a chat or a ticket. Both modes need `--verbose`, and
-nothing is logged with the variable unset. This aid is temporary and will be
-removed once the deployment is understood.
-
 ## What to send back if it fails
 
 The `error:` line and its code, such as `auth.narrowing_unavailable` or

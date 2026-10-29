@@ -133,7 +133,6 @@ func (b *Broker) resolveSource(request Request) (source, error) {
 				namespace: access.Namespace,
 				product:   b.namespace(),
 				audience:  b.exchangedAudience(request, access),
-				debug:     b.TokenDebug,
 			}, nil
 		}
 		if access.Strategy == contexts.StrategyDerived {

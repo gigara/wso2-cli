@@ -106,24 +106,6 @@ func TestAThunderLoginSessionWithNoResourceIsExchangedForTheProductsResource(t *
 	}
 }
 
-func TestTokenDebugIsHandedTheLoginTokenAndTheExchangedToken(t *testing.T) {
-	deployment := seedExchangeDeployment(t, fakeissuer.Options{})
-	broker := deployment.broker(t)
-	seen := map[string]string{}
-	broker.TokenDebug = func(stage, token string) { seen[stage] = token }
-
-	grant, err := broker.Acquire(declaredRequest())
-	if err != nil {
-		t.Fatalf("Acquire returned %v", err)
-	}
-	if seen["exchanged"] != grant.Token {
-		t.Errorf("the exchanged token handed to TokenDebug is not the one granted")
-	}
-	if seen["login"] == "" || seen["login"] == grant.Token {
-		t.Errorf("TokenDebug was not handed the login session's own token: %v", seen)
-	}
-}
-
 func TestAnExchangedProductIsAnsweredWithoutASessionOfItsOwn(t *testing.T) {
 	deployment := seedExchangeDeployment(t, fakeissuer.Options{})
 	grant, err := deployment.broker(t).Acquire(declaredRequest())
