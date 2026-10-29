@@ -59,6 +59,8 @@ func (t *Tree) declare(command *cobra.Command, path []string, into *[]commandtre
 		Hidden:   command.Hidden,
 		Aliases:  append([]string(nil), command.Aliases...),
 		Flags:    declareFlags(command),
+
+		TimeoutSeconds: declaredTimeout(command),
 	})
 
 	for _, child := range command.Commands() {

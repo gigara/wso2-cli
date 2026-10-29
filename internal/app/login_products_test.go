@@ -259,6 +259,81 @@ func TestLoginRefusesWhenEveryProductIsReachedByAGrant(t *testing.T) {
 	}
 }
 
+// exchangeOnlyThunderDoc is a ThunderID identity whose one product is reached
+// by exchange, the way a WSO2 Cloud context records the Integration Platform:
+// no product is direct, so the login has no resource of its own to name.
+func exchangeOnlyThunderDoc(loginIssuer string) contexts.Document {
+	document := browserDoc(loginIssuer)
+	document.Contexts[0].Login.Provider = contexts.ProviderThunder
+	document.Contexts[0].Products = map[string]contexts.Product{
+		"intg": {Endpoint: "https://intg.example/api", Audience: "https://intg.example/api",
+			Grant: &contexts.Grant{Kind: contexts.GrantExchange}},
+	}
+	return document
+}
+
+// A ThunderID context whose products are all reached by exchange logs in
+// without a resource indicator: the login session is only ever exchanged, and
+// each exchange names the product's resource itself. WSO2 Cloud's ThunderID
+// registers its CLI client for exactly this.
+func TestLoginOnAThunderContextWhoseProductsAreAllExchangedNamesNoResource(t *testing.T) {
+	keyring.MockInit()
+	login := fakeissuer.New(t, fakeissuer.Options{})
+	shell, _, errOut := newLoginShell(t)
+	installLogin(t, shell, exchangeOnlyThunderDoc(login.URL))
+	var authorized []string
+	shell.OpenBrowser = func(authURL string) error {
+		authorized = append(authorized, authURL)
+		go func() {
+			if response, err := http.Get(authURL); err == nil {
+				_ = response.Body.Close()
+			}
+		}()
+		return nil
+	}
+
+	if code := shell.Run([]string{"login"}); code != exit.OK {
+		t.Fatalf("login failed: exit %d, stderr %s", code, errOut)
+	}
+	if len(authorized) != 1 {
+		t.Fatalf("login opened %d authorizations, want the login session's one", len(authorized))
+	}
+	if strings.Contains(authorized[0], "resource=") {
+		t.Errorf("the login named a resource it has none of: %s", authorized[0])
+	}
+	stored, err := (session.Store{StateRoot: shell.StateRoot}).Load(credentialRef)
+	if err != nil {
+		t.Fatalf("the login session was not stored: %v", err)
+	}
+	if stored.Resource != "" {
+		t.Errorf("the login session is bound to %q, want no resource", stored.Resource)
+	}
+	if _, err := (session.Store{StateRoot: shell.StateRoot}).Load(
+		contexts.ProductSessionRef(credentialRef, "intg")); err == nil {
+		t.Error("the exchanged product got a session of its own")
+	}
+}
+
+// An issuer that does require a resource still refuses that login, and the
+// refusal names the same code the shell used to raise before asking it.
+func TestLoginOnAnExchangeOnlyThunderContextIsRefusedByAnIssuerRequiringAResource(t *testing.T) {
+	keyring.MockInit()
+	login := fakeissuer.New(t, fakeissuer.Options{RequireResource: true})
+	shell, _, errOut := newLoginShell(t)
+	installLogin(t, shell, exchangeOnlyThunderDoc(login.URL))
+	followBrowser(&shell)
+
+	if code := shell.Run([]string{"login"}); code != exit.AuthPolicy {
+		t.Fatalf("exit %d, want %d (auth policy); stderr %s", code, exit.AuthPolicy, errOut)
+	}
+	if !strings.Contains(errOut.String(), "auth.product_not_configured") {
+		t.Errorf("stderr does not name auth.product_not_configured:\n%s", errOut)
+	}
+	if _, err := (session.Store{StateRoot: shell.StateRoot}).Load(credentialRef); err == nil {
+		t.Error("a refused login stored a session")
+	}
+}
+
 func TestLoginOnlyAnExchangedProductAuthorizesNothing(t *testing.T) {
 	// Accesses() skips an exchanged product, but --only resolves the access
 	// directly and bypassed that: the shell opened a browser for a product
