@@ -103,6 +103,23 @@ resource. `dev/` holds a kit that builds and records all of this locally.
 | `wso2 intg component redeploy <component> --env <environment>` | Restarts the release deployed in one environment, or starts it again after a stop. |
 | `wso2 intg component logs <component> --env <environment> [--since <duration>] [--tail <n>] [--project <project>]` | Shows what a component logs in one environment: the newest 100 lines of the last hour unless `--since` and `--tail` say otherwise, oldest first. `--tail 0` shows every line in the window, up to 1000. It is the observability proxy's log query, scoped to the component, its project and the environment, the same query build logs uses for a build. |
 
+`build run`, `component deploy` and `component promote` take `--wait`, which
+follows what the command started until it ends, and `--wait-timeout`, 15
+minutes unless given and at most 25. They declare a 30-minute deadline to the
+shell (`cobratree.WithTimeout`), so the module always stops waiting on its own
+first.
+
+- `build run --wait` reads the build listing before starting a build, finds
+  the build as the name that was not there before (the API does not return
+  it), and follows it until it finishes. A build that does not succeed is
+  `intg.build_failed`, naming its logs.
+- `component deploy --wait` and `component promote --wait` follow the target
+  environment until the new release is `ACTIVE`. One that ends `ERROR` or
+  `SUSPENDED` is `intg.deployment_failed`, naming the component's logs.
+  Without `--wait`, their result's `status` is `requested`.
+- A wait that runs out is `intg.wait_timeout`, naming the command that shows
+  where things stand.
+
 Every failure keeps the API's own words. A missing product URL is
 `intg.product_not_recorded`; 401 and 403 are `intg.not_authorized`; 402 is
 `intg.plan_limit`; 404 is `intg.not_found`; other refusals are

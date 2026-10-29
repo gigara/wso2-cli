@@ -41,10 +41,10 @@ type runtimeLogs struct {
 func newRuntimeLogs(t *testing.T, entries string) runtimeLogs {
 	return runtimeLogs{
 		api: newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
-			"/projects":                   {http.StatusOK, `{"items":[{"id":"orders"}]}`},
-			"/projects/orders/components": {http.StatusOK, ordersComponents},
+			"/projects":                   {status: http.StatusOK, body: `{"items":[{"id":"orders"}]}`},
+			"/projects/orders/components": {status: http.StatusOK, body: ordersComponents},
 		})),
-		obs: newStubAt(t, obsPrefix, map[string]stubRoute{"POST " + logsQueryPath: {http.StatusOK, entries}}),
+		obs: newStubAt(t, obsPrefix, map[string]stubRoute{"POST " + logsQueryPath: {status: http.StatusOK, body: entries}}),
 	}
 }
 

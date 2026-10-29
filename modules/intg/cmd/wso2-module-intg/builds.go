@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -103,12 +104,15 @@ func buildListRecovery(componentID string) string {
 // buildRunFlags are the options of "wso2 intg build run".
 type buildRunFlags struct {
 	commit string
+	waitFlags
 }
 
 // buildRun answers "wso2 intg build run <component> [--commit <sha>]".
 //
 // The API accepts the request without naming the build it started, so the
-// result names the listing where it appears, newest first.
+// result names the listing where it appears, newest first. With --wait the
+// listing is read before the build is started, the build is found as the
+// name that was not there before, and it is followed until it finishes.
 func buildRun(command *cobra.Command, flags *buildRunFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
 		componentID, err := exactlyOneArgument(command.Flags().Args(), "name the component to build",
@@ -127,9 +131,23 @@ func buildRun(command *cobra.Command, flags *buildRunFlags) module.Handler {
 			body["sha"] = strings.ToLower(flags.commit)
 			commit = body["sha"]
 		}
+		if err := flags.validate(); err != nil {
+			return result.Result{}, err
+		}
 		client, err := clientFor(ctx, request)
 		if err != nil {
 			return result.Result{}, err
+		}
+		var before map[string]bool
+		if flags.wait {
+			listed, err := listBuilds(ctx, client, componentID, request.Context.Endpoint)
+			if err != nil {
+				return result.Result{}, err
+			}
+			before = map[string]bool{}
+			for _, b := range listed {
+				before[b.Name] = true
+			}
 		}
 		var accepted struct {
 			Message string `json:"message"`
@@ -142,6 +160,9 @@ func buildRun(command *cobra.Command, flags *buildRunFlags) module.Handler {
 			}
 			return result.Result{}, callFailedNaming(err, "start a build of "+componentID, request.Context.Endpoint,
 				componentListRecovery(""))
+		}
+		if flags.wait {
+			return waitForBuild(ctx, client, componentID, before, flags.timeout, request.Context.Endpoint)
 		}
 		return result.New(BuildStartSchema).
 			With("component", "Component", componentID).
@@ -167,28 +188,25 @@ func buildList(command *cobra.Command) module.Handler {
 		if err != nil {
 			return result.Result{}, err
 		}
-		var listing struct {
-			Items []build `json:"items"`
-		}
-		if err := client.Get(ctx, buildsPath(componentID), &listing); err != nil {
-			return result.Result{}, callFailedNaming(err, "list the builds of "+componentID, request.Context.Endpoint,
-				componentListRecovery(""))
+		builds, err := listBuilds(ctx, client, componentID, request.Context.Endpoint)
+		if err != nil {
+			return result.Result{}, err
 		}
 		report := result.New(BuildsSchema).
 			With("component", "Component", componentID).
-			With("count", "Builds", strconv.Itoa(len(listing.Items))).
+			With("count", "Builds", strconv.Itoa(len(builds))).
 			WithColumn("name", "Name").
 			WithColumn("status", "Status").
 			WithColumn("trigger", "Trigger").
 			WithColumn("commit", "Commit").
 			WithColumn("started", "Started").
 			WithColumn("completed", "Completed")
-		for _, b := range listing.Items {
+		for _, b := range builds {
 			report = report.WithRow(b.Name, orDash(b.Status), orDash(b.Trigger), b.shortCommit(), orDash(b.Started),
 				orDash(b.Completed))
 		}
 		next := "Run wso2 intg build show " + componentID + " <build> to see one build."
-		if len(listing.Items) == 0 {
+		if len(builds) == 0 {
 			next = "It has no builds yet. Start one with wso2 intg build run " + componentID + "."
 		}
 		return report.With(NextField, "Next", next), nil
@@ -225,19 +243,88 @@ func buildShow(command *cobra.Command) module.Handler {
 		case "Pending", "Running":
 			next = "Run wso2 intg build show " + componentID + " " + found.Name + " again to follow it."
 		}
-		return result.New(BuildSchema).
-			With("name", "Name", found.Name).
-			With("component", "Component", found.Component).
-			With("project", "Project", orDash(found.Project)).
-			With("status", "Status", orDash(found.Status)).
-			With("trigger", "Trigger", orDash(found.Trigger)).
-			With("commit", "Commit", orDash(found.Commit)).
-			With("image", "Image", orDash(found.Image)).
-			With("started", "Started", orDash(found.Started)).
-			With("completed", "Completed", orDash(found.Completed)).
-			With("steps", "Steps", found.steps()).
-			With(NextField, "Next", next), nil
+		return buildReport(found, next), nil
 	}
+}
+
+// buildReport is one build in display order.
+func buildReport(found build, next string) result.Result {
+	return result.New(BuildSchema).
+		With("name", "Name", found.Name).
+		With("component", "Component", found.Component).
+		With("project", "Project", orDash(found.Project)).
+		With("status", "Status", orDash(found.Status)).
+		With("trigger", "Trigger", orDash(found.Trigger)).
+		With("commit", "Commit", orDash(found.Commit)).
+		With("image", "Image", orDash(found.Image)).
+		With("started", "Started", orDash(found.Started)).
+		With("completed", "Completed", orDash(found.Completed)).
+		With("steps", "Steps", found.steps()).
+		With(NextField, "Next", next)
+}
+
+// listBuilds reads a component's recent builds, newest first.
+func listBuilds(ctx context.Context, client platform.Client, componentID, endpoint string) ([]build, error) {
+	var listing struct {
+		Items []build `json:"items"`
+	}
+	if err := client.Get(ctx, buildsPath(componentID), &listing); err != nil {
+		return nil, callFailedNaming(err, "list the builds of "+componentID, endpoint, componentListRecovery(""))
+	}
+	return listing.Items, nil
+}
+
+// waitForBuild finds the build a request just started, as the newest one the
+// listing did not hold before, and follows it until it finishes.
+func waitForBuild(ctx context.Context, client platform.Client, componentID string, before map[string]bool,
+	limit time.Duration, endpoint string) (result.Result, error) {
+	deadline := time.Now().Add(limit)
+	var found build
+	err := poll(ctx, limit, func() (bool, error) {
+		listed, err := listBuilds(ctx, client, componentID, endpoint)
+		if err != nil {
+			return false, err
+		}
+		for _, b := range listed {
+			if !before[b.Name] {
+				found = b
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+	if errors.Is(err, errWaitTimeout) {
+		return result.Result{}, problem.New(problem.CategoryProductService, "intg.wait_timeout",
+			"the build of "+componentID+" did not appear within "+limit.String()).
+			WithRecovery("Run wso2 intg build list " + componentID + " to see whether it started.")
+	}
+	if err != nil {
+		return result.Result{}, err
+	}
+	err = poll(ctx, time.Until(deadline), func() (bool, error) {
+		if err := client.Get(ctx, buildPath(componentID, found.Name), &found); err != nil {
+			return false, buildReadFailed(err, "follow the build "+found.Name+" of "+componentID, endpoint, componentID)
+		}
+		return !buildInProgress(found.Status), nil
+	})
+	if errors.Is(err, errWaitTimeout) {
+		return result.Result{}, problem.New(problem.CategoryProductService, "intg.wait_timeout",
+			"the build "+found.Name+" of "+componentID+" was still "+orDash(found.Status)+" after "+limit.String()).
+			WithRecovery("Run wso2 intg build show " + componentID + " " + found.Name + " to follow it.")
+	}
+	if err != nil {
+		return result.Result{}, err
+	}
+	if found.Component == "" {
+		found.Component = componentID
+	}
+	if found.Status != "Succeeded" {
+		return result.Result{}, problem.New(problem.CategoryProductService, "intg.build_failed",
+			"the build "+found.Name+" of "+componentID+" finished as "+found.Status).
+			WithRecovery("Run wso2 intg build logs " + componentID + " " + found.Name + " to see why.")
+	}
+	return buildReport(found, "Run wso2 intg component deploy "+componentID+" --env <environment> --build "+
+		found.Name+" to deploy it."), nil
 }
 
 // buildReadFailed maps a refused read of one build. The API answers a build

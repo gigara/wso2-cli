@@ -45,7 +45,7 @@ const orderAPIRepository = `{"gitProvider":"github","organizationApp":"acme","na
 // --- component list -------------------------------------------------------
 
 func TestComponentListReportsAProjectsComponentsInCreateTerms(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {http.StatusOK, ordersComponents}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: ordersComponents}})
 
 	outcome := run([]string{"component", "list"}, []string{"--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
@@ -72,9 +72,9 @@ func TestComponentListReportsAProjectsComponentsInCreateTerms(t *testing.T) {
 
 func TestComponentListWithoutAProjectReadsEveryProject(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/projects":                     {http.StatusOK, twoProjectIDs},
-		"/projects/orders/components":   {http.StatusOK, ordersComponents},
-		"/projects/payments/components": {http.StatusOK, paymentsComponents},
+		"/projects":                     {status: http.StatusOK, body: twoProjectIDs},
+		"/projects/orders/components":   {status: http.StatusOK, body: ordersComponents},
+		"/projects/payments/components": {status: http.StatusOK, body: paymentsComponents},
 	})
 
 	outcome := run([]string{"component", "list"}, nil, stub.endpoint(), &testkit.Access{Token: "t"})
@@ -92,7 +92,7 @@ func TestComponentListWithoutAProjectReadsEveryProject(t *testing.T) {
 }
 
 func TestAnEmptyComponentListNamesComponentCreate(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {http.StatusOK, `{"items":[]}`}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: `{"items":[]}`}})
 
 	outcome := run([]string{"component", "list"}, []string{"--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
@@ -106,8 +106,8 @@ func TestAnEmptyComponentListNamesComponentCreate(t *testing.T) {
 
 func TestComponentShowFindsTheComponentInItsProjectAndReadsItsRepository(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/projects/orders/components":      {http.StatusOK, ordersComponents},
-		"/components/order-api/repository": {http.StatusOK, orderAPIRepository},
+		"/projects/orders/components":      {status: http.StatusOK, body: ordersComponents},
+		"/components/order-api/repository": {status: http.StatusOK, body: orderAPIRepository},
 	})
 
 	outcome := run([]string{"component", "show"}, []string{"order-api", "--project", "orders"}, stub.endpoint(),
@@ -139,8 +139,8 @@ func TestComponentShowFindsTheComponentInItsProjectAndReadsItsRepository(t *test
 
 func TestComponentShowMatchesADisplayNameWhenNoIDMatches(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/projects/orders/components":         {http.StatusOK, ordersComponents},
-		"/components/nightly-sync/repository": {http.StatusOK, `{}`},
+		"/projects/orders/components":         {status: http.StatusOK, body: ordersComponents},
+		"/components/nightly-sync/repository": {status: http.StatusOK, body: `{}`},
 	})
 
 	outcome := run([]string{"component", "show"}, []string{"Nightly Sync", "--project", "orders"}, stub.endpoint(),
@@ -156,10 +156,10 @@ func TestComponentShowMatchesADisplayNameWhenNoIDMatches(t *testing.T) {
 
 func TestComponentShowWithoutAProjectSearchesEveryProject(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/projects":                      {http.StatusOK, twoProjectIDs},
-		"/projects/orders/components":    {http.StatusOK, ordersComponents},
-		"/projects/payments/components":  {http.StatusOK, paymentsComponents},
-		"/components/refunds/repository": {http.StatusOK, `{}`},
+		"/projects":                      {status: http.StatusOK, body: twoProjectIDs},
+		"/projects/orders/components":    {status: http.StatusOK, body: ordersComponents},
+		"/projects/payments/components":  {status: http.StatusOK, body: paymentsComponents},
+		"/components/refunds/repository": {status: http.StatusOK, body: `{}`},
 	})
 
 	outcome := run([]string{"component", "show"}, []string{"refunds"}, stub.endpoint(), &testkit.Access{Token: "t"})
@@ -173,7 +173,7 @@ func TestComponentShowWithoutAProjectSearchesEveryProject(t *testing.T) {
 }
 
 func TestComponentShowOfAnUnknownComponentNamesTheListing(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {http.StatusOK, ordersComponents}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: ordersComponents}})
 
 	outcome := run([]string{"component", "show"}, []string{"nope", "--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
@@ -186,7 +186,7 @@ func TestComponentShowOfAnUnknownComponentNamesTheListing(t *testing.T) {
 
 func TestComponentShowRefusesADisplayNameThatMatchesTwoComponents(t *testing.T) {
 	twins := `{"items":[{"projectId":"orders","id":"sync-a","name":"Sync"},{"projectId":"orders","id":"sync-b","name":"Sync"}]}`
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {http.StatusOK, twins}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: twins}})
 
 	outcome := run([]string{"component", "show"}, []string{"Sync", "--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
@@ -208,8 +208,7 @@ func createArguments(extra ...string) []string {
 }
 
 func TestComponentCreateSendsTheBodyTheMCPToolSends(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {http.StatusCreated,
-		`{"projectId":"orders","id":"order-api","name":"Order API","componentType":"service","buildpackType":"BI"}`}})
+	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {status: http.StatusCreated, body: `{"projectId":"orders","id":"order-api","name":"Order API","componentType":"service","buildpackType":"BI"}`}})
 
 	outcome := run([]string{"component", "create"},
 		createArguments("--path", "/order-api", "--display-name", "Order API", "--description", "Takes orders",
@@ -264,7 +263,7 @@ func TestComponentCreateMapsEveryTypeAndRuntime(t *testing.T) {
 	}
 	for kind, componentType := range types {
 		for runtime, workflow := range runtimes {
-			stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {http.StatusCreated, `{"id":"x"}`}})
+			stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {status: http.StatusCreated, body: `{"id":"x"}`}})
 			run([]string{"component", "create"}, []string{"x", "--project", "orders", "--type", kind, "--runtime", runtime,
 				"--repo", "https://github.com/acme/x", "--branch", "main"}, stub.endpoint(), &testkit.Access{Token: "t"})
 			spec := decodeBody(t, stub.body)["spec"].(map[string]any)
@@ -281,8 +280,7 @@ func TestComponentCreateMapsEveryTypeAndRuntime(t *testing.T) {
 // The platform suffixes a taken name rather than refusing it, so the result
 // reports the ID it actually created and says why it differs.
 func TestComponentCreateReportsASuffixedName(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {http.StatusCreated,
-		`{"projectId":"orders","id":"order-api-x7k2","name":"order-api","componentType":"service","buildpackType":"BI",
+	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {status: http.StatusCreated, body: `{"projectId":"orders","id":"order-api-x7k2","name":"order-api","componentType":"service","buildpackType":"BI",
 		  "warning":"component created, but the first build could not be started"}`}})
 
 	outcome := run([]string{"component", "create"}, createArguments(), stub.endpoint(), &testkit.Access{Token: "t"})
@@ -354,8 +352,7 @@ func TestComponentCreateMapsItsOwnRefusals(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {c.status,
-				`{"error":"refused","message":"the platform's words"}`}})
+			stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {status: c.status, body: `{"error":"refused","message":"the platform's words"}`}})
 
 			outcome := run([]string{"component", "create"}, createArguments(), stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -391,7 +388,7 @@ func TestComponentDeleteNamesTheProjectOnlyWhenGiven(t *testing.T) {
 		{[]string{"order-api", "--yes", "--project", "orders"}, "projectName=orders"},
 		{[]string{"order-api", "--yes"}, ""},
 	} {
-		stub := newPlatformStub(t, map[string]stubRoute{"DELETE /components/order-api": {http.StatusNoContent, ``}})
+		stub := newPlatformStub(t, map[string]stubRoute{"DELETE /components/order-api": {status: http.StatusNoContent, body: ``}})
 
 		outcome := run([]string{"component", "delete"}, c.arguments, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -410,7 +407,7 @@ func TestComponentDeleteNamesTheProjectOnlyWhenGiven(t *testing.T) {
 
 func TestComponentDeleteOfAnUnknownComponentNamesTheListing(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"DELETE /components/nope": {http.StatusNotFound, `{"error":"Not Found","message":"component nope not found"}`},
+		"DELETE /components/nope": {status: http.StatusNotFound, body: `{"error":"Not Found","message":"component nope not found"}`},
 	})
 
 	outcome := run([]string{"component", "delete"}, []string{"nope", "--yes"}, stub.endpoint(), &testkit.Access{Token: "t"})

@@ -188,6 +188,8 @@ func commands() *cobratree.Tree {
 	buildRunFlagsValue := &buildRunFlags{}
 	buildRunCommand.Flags().StringVar(&buildRunFlagsValue.commit, "commit", "",
 		"The full 40-character commit SHA to build. Defaults to the head of the component's branch.")
+	buildRunFlagsValue.bind(buildRunCommand, "the build finishes")
+	cobratree.WithTimeout(buildRunCommand, waitDeadline)
 	buildListCommand := &cobra.Command{
 		Use:   "list <component>",
 		Short: "List a component's recent builds, newest first.",
@@ -216,6 +218,8 @@ func commands() *cobratree.Tree {
 		"A succeeded build whose image to deploy. Defaults to the component's current image.")
 	componentDeployCommand.Flags().StringVar(&deployFlags.project, "project", "",
 		"The project the component is in. Defaults to the one the component listing reports.")
+	deployFlags.bind(componentDeployCommand, "the new release is running")
+	cobratree.WithTimeout(componentDeployCommand, waitDeadline)
 	componentPromoteCommand := &cobra.Command{
 		Use:   "promote <component>",
 		Short: "Promote what runs in one environment to the next, along the project's pipeline.",
@@ -226,6 +230,8 @@ func commands() *cobratree.Tree {
 	componentPromoteCommand.Flags().StringVar(&promoteFlags.to, "to", "", "The environment to promote into. Required.")
 	componentPromoteCommand.Flags().StringVar(&promoteFlags.project, "project", "",
 		"The project the component is in. Defaults to the one the component listing reports.")
+	promoteFlags.bind(componentPromoteCommand, "the promoted release is running")
+	cobratree.WithTimeout(componentPromoteCommand, waitDeadline)
 	componentStopCommand := &cobra.Command{
 		Use:   "stop <component>",
 		Short: "Stop a component in one environment, keeping its deployment.",

@@ -45,7 +45,7 @@ const failedBuild = `{"name":"order-api-workflow-b1","status":"Failed","trigger"
 
 func TestBuildRunBuildsTheBranchHeadWhenNoCommitIsGiven(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"POST /components/order-api/builds": {http.StatusCreated, `{"message":"build triggered","success":true}`},
+		"POST /components/order-api/builds": {status: http.StatusCreated, body: `{"message":"build triggered","success":true}`},
 	})
 
 	outcome := run([]string{"build", "run"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
@@ -70,7 +70,7 @@ func TestBuildRunBuildsTheBranchHeadWhenNoCommitIsGiven(t *testing.T) {
 
 func TestBuildRunPinsAFullCommit(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"POST /components/order-api/builds": {http.StatusCreated, `{"message":"build triggered","success":true}`},
+		"POST /components/order-api/builds": {status: http.StatusCreated, body: `{"message":"build triggered","success":true}`},
 	})
 
 	outcome := run([]string{"build", "run"}, []string{"order-api", "--commit", strings.ToUpper(fullCommit)},
@@ -117,7 +117,7 @@ func TestBuildRunMapsItsRefusals(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			stub := newPlatformStub(t, map[string]stubRoute{"POST /components/order-api/builds": {c.status, c.body}})
+			stub := newPlatformStub(t, map[string]stubRoute{"POST /components/order-api/builds": {status: c.status, body: c.body}})
 
 			outcome := run([]string{"build", "run"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -132,7 +132,7 @@ func TestBuildRunMapsItsRefusals(t *testing.T) {
 // --- build list -----------------------------------------------------------
 
 func TestBuildListReportsTheBuildsNewestFirst(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/components/order-api/builds": {http.StatusOK, orderAPIBuilds}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/components/order-api/builds": {status: http.StatusOK, body: orderAPIBuilds}})
 
 	outcome := run([]string{"build", "list"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -150,7 +150,7 @@ func TestBuildListReportsTheBuildsNewestFirst(t *testing.T) {
 }
 
 func TestAnEmptyBuildListNamesBuildRun(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/components/order-api/builds": {http.StatusOK, `{"items":[]}`}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/components/order-api/builds": {status: http.StatusOK, body: `{"items":[]}`}})
 
 	outcome := run([]string{"build", "list"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -163,7 +163,7 @@ func TestAnEmptyBuildListNamesBuildRun(t *testing.T) {
 
 func TestBuildShowReportsAFailedBuildAndPointsAtItsLogs(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/components/order-api/builds/order-api-workflow-b1": {http.StatusOK, failedBuild},
+		"/components/order-api/builds/order-api-workflow-b1": {status: http.StatusOK, body: failedBuild},
 	})
 
 	outcome := run([]string{"build", "show"}, []string{"order-api", "order-api-workflow-b1"}, stub.endpoint(),
@@ -194,7 +194,7 @@ func TestBuildShowReportsAFailedBuildAndPointsAtItsLogs(t *testing.T) {
 
 func TestBuildShowOfARunningBuildSaysToFollowIt(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/components/order-api/builds/b2": {http.StatusOK, `{"name":"b2","status":"Running","trigger":"manual"}`},
+		"/components/order-api/builds/b2": {status: http.StatusOK, body: `{"name":"b2","status":"Running","trigger":"manual"}`},
 	})
 
 	outcome := run([]string{"build", "show"}, []string{"order-api", "b2"}, stub.endpoint(), &testkit.Access{Token: "t"})
@@ -208,8 +208,7 @@ func TestBuildShowOfARunningBuildSaysToFollowIt(t *testing.T) {
 // refusal also points at the listing.
 func TestBuildShowOfAnUnknownBuildNamesTheListing(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/components/order-api/builds/nope": {http.StatusInternalServerError,
-			`{"error":"Internal Server Error","message":"failed to get build status"}`},
+		"/components/order-api/builds/nope": {status: http.StatusInternalServerError, body: `{"error":"Internal Server Error","message":"failed to get build status"}`},
 	})
 
 	outcome := run([]string{"build", "show"}, []string{"order-api", "nope"}, stub.endpoint(), &testkit.Access{Token: "t"})
@@ -249,12 +248,10 @@ type logsDeployment struct {
 func newLogsDeployment(t *testing.T, status int, entries string) logsDeployment {
 	return logsDeployment{
 		api: newPlatformStub(t, map[string]stubRoute{
-			"/components/order-api/builds/b1": {http.StatusOK,
-				`{"name":"b1","status":"Failed","startedAt":"2026-10-27T09:00:00Z","completedAt":"2026-10-27T09:04:00Z"}`},
-			"/components/order-api/builds/b2": {http.StatusOK,
-				`{"name":"b2","status":"Running","startedAt":"2026-10-27T10:00:00Z"}`},
+			"/components/order-api/builds/b1": {status: http.StatusOK, body: `{"name":"b1","status":"Failed","startedAt":"2026-10-27T09:00:00Z","completedAt":"2026-10-27T09:04:00Z"}`},
+			"/components/order-api/builds/b2": {status: http.StatusOK, body: `{"name":"b2","status":"Running","startedAt":"2026-10-27T10:00:00Z"}`},
 		}),
-		obs: newStubAt(t, obsPrefix, map[string]stubRoute{"POST " + logsQueryPath: {status, entries}}),
+		obs: newStubAt(t, obsPrefix, map[string]stubRoute{"POST " + logsQueryPath: {status: status, body: entries}}),
 	}
 }
 

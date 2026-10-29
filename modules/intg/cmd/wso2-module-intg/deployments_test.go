@@ -37,15 +37,13 @@ const activeDeployment = `{"releaseId":"order-api-r3","deploymentStatusV2":"ACTI
 // and is not deployed in production; its build b2 succeeded and b1 failed.
 func deploymentRoutes(extra map[string]stubRoute) map[string]stubRoute {
 	routes := map[string]stubRoute{
-		"/environments":    {http.StatusOK, twoEnvironments},
-		"/projects/orders": {http.StatusOK, `{"id":"orders","defaultDeploymentPipelineId":"default"}`},
-		"/deploymentpipelines/default": {http.StatusOK,
-			`{"name":"default","promotionPaths":[{"sourceEnvironment":"development","targetEnvironments":["production"]}]}`},
-		"GET /components/order-api/deployments?environmentId=development": {http.StatusOK, activeDeployment},
-		"GET /components/order-api/deployments?environmentId=production":  {http.StatusOK, ``},
-		"/components/order-api/builds/b2": {http.StatusOK,
-			`{"name":"b2","status":"Succeeded","image":"registry.example/order-api:b2"}`},
-		"/components/order-api/builds/b1": {http.StatusOK, `{"name":"b1","status":"Failed","image":""}`},
+		"/environments":                {status: http.StatusOK, body: twoEnvironments},
+		"/projects/orders":             {status: http.StatusOK, body: `{"id":"orders","defaultDeploymentPipelineId":"default"}`},
+		"/deploymentpipelines/default": {status: http.StatusOK, body: `{"name":"default","promotionPaths":[{"sourceEnvironment":"development","targetEnvironments":["production"]}]}`},
+		"GET /components/order-api/deployments?environmentId=development": {status: http.StatusOK, body: activeDeployment},
+		"GET /components/order-api/deployments?environmentId=production":  {status: http.StatusOK, body: ``},
+		"/components/order-api/builds/b2":                                 {status: http.StatusOK, body: `{"name":"b2","status":"Succeeded","image":"registry.example/order-api:b2"}`},
+		"/components/order-api/builds/b1":                                 {status: http.StatusOK, body: `{"name":"b1","status":"Failed","image":""}`},
 	}
 	for path, route := range extra {
 		routes[path] = route
@@ -151,7 +149,7 @@ func TestAnUnknownEnvironmentIsRefusedNamingTheEnvironments(t *testing.T) {
 
 func TestComponentDeployReleasesTheCurrentImageWhereThePipelineStarts(t *testing.T) {
 	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
-		"POST /components/order-api/deployments": {http.StatusOK, `{"message":"order-api-r4"}`},
+		"POST /components/order-api/deployments": {status: http.StatusOK, body: `{"message":"order-api-r4"}`},
 	}))
 
 	outcome := run([]string{"component", "deploy"}, []string{"order-api", "--env", "development", "--project", "orders"},
@@ -179,7 +177,7 @@ func TestComponentDeployReleasesTheCurrentImageWhereThePipelineStarts(t *testing
 
 func TestComponentDeployOfASucceededBuildSendsItsName(t *testing.T) {
 	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
-		"POST /components/order-api/deployments": {http.StatusOK, `{"message":"order-api-r4"}`},
+		"POST /components/order-api/deployments": {status: http.StatusOK, body: `{"message":"order-api-r4"}`},
 	}))
 
 	outcome := run([]string{"component", "deploy"}, []string{"order-api", "--env", "development", "--project", "orders",
@@ -225,9 +223,9 @@ func TestComponentDeployRefusesAnEnvironmentThePipelineDoesNotStartAt(t *testing
 
 func TestComponentDeployFindsTheProjectWhenNoneIsGiven(t *testing.T) {
 	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
-		"/projects":                              {http.StatusOK, `{"items":[{"id":"orders"}]}`},
-		"/projects/orders/components":            {http.StatusOK, ordersComponents},
-		"POST /components/order-api/deployments": {http.StatusOK, `{"message":"order-api-r4"}`},
+		"/projects":                              {status: http.StatusOK, body: `{"items":[{"id":"orders"}]}`},
+		"/projects/orders/components":            {status: http.StatusOK, body: ordersComponents},
+		"POST /components/order-api/deployments": {status: http.StatusOK, body: `{"message":"order-api-r4"}`},
 	}))
 
 	outcome := run([]string{"component", "deploy"}, []string{"order-api", "--env", "development"}, stub.endpoint(),
@@ -245,7 +243,7 @@ func TestComponentDeployFindsTheProjectWhenNoneIsGiven(t *testing.T) {
 
 func TestComponentPromoteSendsTheSourceReleaseAndThePipeline(t *testing.T) {
 	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
-		"POST /components/order-api/deployments/promote": {http.StatusOK, `{"message":"order-api-r3"}`},
+		"POST /components/order-api/deployments/promote": {status: http.StatusOK, body: `{"message":"order-api-r3"}`},
 	}))
 
 	outcome := run([]string{"component", "promote"}, []string{"order-api", "--from", "development", "--to", "Production",
@@ -295,8 +293,7 @@ func TestComponentPromoteRefusesTheSameEnvironmentTwice(t *testing.T) {
 // a pipeline rule rather than a missing permission.
 func TestComponentPromoteReportsAHopThePipelineRefuses(t *testing.T) {
 	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
-		"POST /components/order-api/deployments/promote": {http.StatusForbidden,
-			`{"error":"Forbidden","message":"promotion from development to production is not allowed"}`},
+		"POST /components/order-api/deployments/promote": {status: http.StatusForbidden, body: `{"error":"Forbidden","message":"promotion from development to production is not allowed"}`},
 	}))
 
 	outcome := run([]string{"component", "promote"}, []string{"order-api", "--from", "development", "--to", "production",
@@ -312,7 +309,7 @@ func TestComponentPromoteReportsAHopThePipelineRefuses(t *testing.T) {
 
 func TestComponentStopStopsItInOneEnvironment(t *testing.T) {
 	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
-		"PUT /components/order-api/deployments/stop": {http.StatusOK, `{"message":"stopped"}`},
+		"PUT /components/order-api/deployments/stop": {status: http.StatusOK, body: `{"message":"stopped"}`},
 	}))
 
 	outcome := run([]string{"component", "stop"}, []string{"order-api", "--env", "development"}, stub.endpoint(),
@@ -337,7 +334,7 @@ func TestComponentStopStopsItInOneEnvironment(t *testing.T) {
 
 func TestComponentRedeployRestartsTheDeployedRelease(t *testing.T) {
 	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
-		"POST /components/order-api/deployments/redeploy": {http.StatusOK, `{"message":"redeployed"}`},
+		"POST /components/order-api/deployments/redeploy": {status: http.StatusOK, body: `{"message":"redeployed"}`},
 	}))
 
 	outcome := run([]string{"component", "redeploy"}, []string{"order-api", "--env", "development"}, stub.endpoint(),
@@ -357,8 +354,8 @@ func TestComponentRedeployRestartsTheDeployedRelease(t *testing.T) {
 func TestStopAndRedeployWhereNothingIsDeployedNameTheDeployments(t *testing.T) {
 	for _, command := range []string{"stop", "redeploy"} {
 		stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
-			"PUT /components/order-api/deployments/stop":      {http.StatusNotFound, `{"error":"Not Found","message":"no deployment"}`},
-			"POST /components/order-api/deployments/redeploy": {http.StatusNotFound, `{"error":"Not Found","message":"no deployment"}`},
+			"PUT /components/order-api/deployments/stop":      {status: http.StatusNotFound, body: `{"error":"Not Found","message":"no deployment"}`},
+			"POST /components/order-api/deployments/redeploy": {status: http.StatusNotFound, body: `{"error":"Not Found","message":"no deployment"}`},
 		}))
 
 		outcome := run([]string{"component", command}, []string{"order-api", "--env", "production"}, stub.endpoint(),

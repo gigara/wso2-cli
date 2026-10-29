@@ -34,10 +34,13 @@ import (
 // the recorded URL would reach nothing.
 const basePath = "/ipaas-service-ipaas-api-endpoint"
 
-// stubRoute is one canned answer: the status and the body.
+// stubRoute is one canned answer: the status and the body. A route with
+// then answers its own status and body first, then each of then in turn,
+// repeating the last, for a resource that changes while a command polls it.
 type stubRoute struct {
 	status int
 	body   string
+	then   []stubRoute
 }
 
 // platformStub stands in for the Integration Platform API, recording the
@@ -69,6 +72,7 @@ func newPlatformStub(t *testing.T, routes map[string]stubRoute) *platformStub {
 func newStubAt(t *testing.T, prefix string, routes map[string]stubRoute) *platformStub {
 	t.Helper()
 	stub := &platformStub{prefix: prefix}
+	served := map[string]int{}
 	stub.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		stub.calls++
 		stub.method, stub.path, stub.query = r.Method, r.URL.EscapedPath(), r.URL.RawQuery
@@ -84,7 +88,13 @@ func newStubAt(t *testing.T, prefix string, routes map[string]stubRoute) *platfo
 			route, found = routes[relative]
 		}
 		if !found || !strings.HasPrefix(r.URL.Path, prefix) {
-			route = stubRoute{http.StatusNotFound, `{"error":"Not Found","message":"no such route"}`}
+			route = stubRoute{status: http.StatusNotFound, body: `{"error":"Not Found","message":"no such route"}`}
+		}
+		if len(route.then) > 0 {
+			key := r.Method + " " + r.URL.String()
+			answers := append([]stubRoute{{status: route.status, body: route.body}}, route.then...)
+			route = answers[min(served[key], len(answers)-1)]
+			served[key]++
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(route.status)
@@ -115,7 +125,7 @@ const twoProjects = `{"items":[
    "defaultDeploymentPipelineId":"default","gitOrganization":"","repository":"","deleting":true}]}`
 
 func TestProjectListReportsARowPerProject(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects": {http.StatusOK, twoProjects}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects": {status: http.StatusOK, body: twoProjects}})
 
 	outcome := run([]string{"project", "list"}, nil, stub.endpoint(), &testkit.Access{Token: "exchanged-token"})
 
@@ -164,7 +174,7 @@ func TestProjectListReportsARowPerProject(t *testing.T) {
 }
 
 func TestProjectListAsksForTheIntegrationAudienceAndNoScopes(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects": {http.StatusOK, `{"items":[]}`}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects": {status: http.StatusOK, body: `{"items":[]}`}})
 
 	outcome := run([]string{"project", "list"}, nil, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -182,7 +192,7 @@ func TestProjectListAsksForTheIntegrationAudienceAndNoScopes(t *testing.T) {
 }
 
 func TestAnEmptyProjectListSaysSo(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects": {http.StatusOK, `{"items":[]}`}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects": {status: http.StatusOK, body: `{"items":[]}`}})
 
 	outcome := run([]string{"project", "list"}, nil, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -210,7 +220,7 @@ func TestProjectListWithoutARecordedEndpointAsksForNoAccess(t *testing.T) {
 }
 
 func TestProjectListPassesTheShellsDenialThroughUnchanged(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects": {http.StatusOK, twoProjects}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects": {status: http.StatusOK, body: twoProjects}})
 	denial := problem.New(problem.CategoryAuthPolicy, "auth.session_required", "no session").
 		WithRecovery("Run wso2 login.")
 
@@ -247,7 +257,7 @@ func TestProjectListMapsEachRefusalToItsOwnProblem(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			stub := newPlatformStub(t, map[string]stubRoute{"/projects": {c.status, c.body}})
+			stub := newPlatformStub(t, map[string]stubRoute{"/projects": {status: c.status, body: c.body}})
 
 			outcome := run([]string{"project", "list"}, nil, stub.endpoint(), &testkit.Access{Token: "t"})
 

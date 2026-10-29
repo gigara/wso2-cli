@@ -356,6 +356,7 @@ type componentDeployFlags struct {
 	env     string
 	build   string
 	project string
+	waitFlags
 }
 
 // componentDeploy answers "wso2 intg component deploy <component> --env <environment>".
@@ -371,6 +372,9 @@ func componentDeploy(command *cobra.Command, flags *componentDeployFlags) module
 			return result.Result{}, err
 		}
 		if err := requireFlag(flags.env, "--env", recovery); err != nil {
+			return result.Result{}, err
+		}
+		if err := flags.validate(); err != nil {
 			return result.Result{}, err
 		}
 		client, err := clientFor(ctx, request)
@@ -427,13 +431,23 @@ func componentDeploy(command *cobra.Command, flags *componentDeployFlags) module
 			return result.Result{}, callFailedNaming(err, "deploy "+componentID+" to "+env.ID, endpoint,
 				componentListRecovery(project))
 		}
+		release, status, next := accepted.Message, "requested", "Run wso2 intg deployment show "+componentID+
+			" --env "+env.ID+" to see it start."
+		if flags.wait {
+			running, err := waitForRollout(ctx, client, componentID, env.ID, release, flags.timeout, endpoint)
+			if err != nil {
+				return result.Result{}, err
+			}
+			release, status = running.Release, running.Status
+			next = "Run wso2 intg component logs " + componentID + " --env " + env.ID + " to see what it does."
+		}
 		return result.New(DeploySchema).
 			With("component", "Component", componentID).
 			With("environment", "Environment", env.ID).
 			With("build", "Build", built).
-			With("release", "Release", orDash(accepted.Message)).
-			With(NextField, "Next", "Run wso2 intg deployment show "+componentID+" --env "+env.ID+
-				" to see it start."), nil
+			With("release", "Release", orDash(release)).
+			With("status", "Status", status).
+			With(NextField, "Next", next), nil
 	}
 }
 
@@ -442,6 +456,7 @@ type componentPromoteFlags struct {
 	from    string
 	to      string
 	project string
+	waitFlags
 }
 
 // componentPromote answers "wso2 intg component promote <component> --from <environment> --to <environment>".
@@ -459,6 +474,9 @@ func componentPromote(command *cobra.Command, flags *componentPromoteFlags) modu
 			return result.Result{}, err
 		}
 		if err := requireFlag(flags.to, "--to", recovery); err != nil {
+			return result.Result{}, err
+		}
+		if err := flags.validate(); err != nil {
 			return result.Result{}, err
 		}
 		client, err := clientFor(ctx, request)
@@ -531,13 +549,22 @@ func componentPromote(command *cobra.Command, flags *componentPromoteFlags) modu
 		if release == "" {
 			release = source.Release
 		}
+		status, next := "requested", "Run wso2 intg deployment show "+componentID+" --env "+to.ID+" to see it start."
+		if flags.wait {
+			running, err := waitForRollout(ctx, client, componentID, to.ID, release, flags.timeout, endpoint)
+			if err != nil {
+				return result.Result{}, err
+			}
+			status = running.Status
+			next = "Run wso2 intg component logs " + componentID + " --env " + to.ID + " to see what it does."
+		}
 		return result.New(PromotionSchema).
 			With("component", "Component", componentID).
 			With("from", "From", from.ID).
 			With("to", "To", to.ID).
 			With("release", "Release", release).
-			With(NextField, "Next", "Run wso2 intg deployment show "+componentID+" --env "+to.ID+
-				" to see it start."), nil
+			With("status", "Status", status).
+			With(NextField, "Next", next), nil
 	}
 }
 

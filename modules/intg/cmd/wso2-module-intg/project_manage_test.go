@@ -34,7 +34,7 @@ const ordersProject = `{"id":"orders","handler":"orders","name":"Orders","descri
 // --- project show ---------------------------------------------------------
 
 func TestProjectShowReportsTheProjectInDisplayOrder(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders": {http.StatusOK, ordersProject}})
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders": {status: http.StatusOK, body: ordersProject}})
 
 	outcome := run([]string{"project", "show"}, []string{"orders"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -73,7 +73,7 @@ func TestProjectShowEscapesTheProjectName(t *testing.T) {
 
 func TestProjectShowOfAnUnknownProjectNamesTheListing(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/projects/nope": {http.StatusNotFound, `{"error":"Not Found","message":"project nope not found"}`},
+		"/projects/nope": {status: http.StatusNotFound, body: `{"error":"Not Found","message":"project nope not found"}`},
 	})
 
 	outcome := run([]string{"project", "show"}, []string{"nope"}, stub.endpoint(), &testkit.Access{Token: "t"})
@@ -102,7 +102,7 @@ func TestProjectShowNeedsExactlyOneProject(t *testing.T) {
 
 func TestProjectCreateSendsOnlyWhatWasGiven(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"POST /projects": {http.StatusCreated, `{"id":"orders","name":"orders","defaultDeploymentPipelineId":"default"}`},
+		"POST /projects": {status: http.StatusCreated, body: `{"id":"orders","name":"orders","defaultDeploymentPipelineId":"default"}`},
 	})
 
 	outcome := run([]string{"project", "create"}, []string{"orders"}, stub.endpoint(), &testkit.Access{Token: "t"})
@@ -126,7 +126,7 @@ func TestProjectCreateSendsOnlyWhatWasGiven(t *testing.T) {
 }
 
 func TestProjectCreateSendsEveryGivenFieldAndTheRepositoryLink(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects": {http.StatusCreated, ordersProject}})
+	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects": {status: http.StatusCreated, body: ordersProject}})
 
 	outcome := run([]string{"project", "create"}, []string{"orders",
 		"--display-name", "Orders", "--description", "Order flows", "--pipeline", "default",
@@ -153,7 +153,7 @@ func TestProjectCreateSendsEveryGivenFieldAndTheRepositoryLink(t *testing.T) {
 }
 
 func TestProjectCreateReadsABitbucketRepository(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects": {http.StatusCreated, ordersProject}})
+	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects": {status: http.StatusCreated, body: ordersProject}})
 
 	run([]string{"project", "create"}, []string{"orders", "--repo", "bitbucket.org/acme/orders", "--branch", "dev"},
 		stub.endpoint(), &testkit.Access{Token: "t"})
@@ -214,7 +214,7 @@ func TestProjectCreateMapsItsOwnRefusals(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			stub := newPlatformStub(t, map[string]stubRoute{"POST /projects": {c.status, c.body}})
+			stub := newPlatformStub(t, map[string]stubRoute{"POST /projects": {status: c.status, body: c.body}})
 
 			outcome := run([]string{"project", "create"}, []string{"orders"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -244,7 +244,7 @@ func TestProjectDeleteWithoutYesCallsNothing(t *testing.T) {
 }
 
 func TestProjectDeleteReportsThatDeletionContinues(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"DELETE /projects/orders": {http.StatusNoContent, ``}})
+	stub := newPlatformStub(t, map[string]stubRoute{"DELETE /projects/orders": {status: http.StatusNoContent, body: ``}})
 
 	outcome := run([]string{"project", "delete"}, []string{"orders", "--yes"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
@@ -265,7 +265,7 @@ func TestProjectDeleteReportsThatDeletionContinues(t *testing.T) {
 
 func TestProjectDeleteOfAnUnknownProjectNamesTheListing(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"DELETE /projects/nope": {http.StatusNotFound, `{"error":"Not Found","message":"project nope not found"}`},
+		"DELETE /projects/nope": {status: http.StatusNotFound, body: `{"error":"Not Found","message":"project nope not found"}`},
 	})
 
 	outcome := run([]string{"project", "delete"}, []string{"nope", "--yes"}, stub.endpoint(), &testkit.Access{Token: "t"})
