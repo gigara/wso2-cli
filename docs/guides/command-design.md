@@ -137,8 +137,8 @@ is shown once, with a note on standard error, and is written nowhere.
 A destructive command asks at a terminal, naming what is about to go.
 `--yes` answers the question in advance. Under `--no-input`,
 `WSO2_NO_INPUT`, or a standard input that is not a terminal, it is refused
-with `shell.confirmation_required`, exit class 64, and a recovery naming the
-same command with `--yes`. The shell's own `product remove` works this way.
+with `shell.non_interactive`, exit class 64, and a recovery naming the same
+command with `--yes`. The shell's own `product remove` works this way.
 
 ```text
 ws apim api delete <api>               # at a terminal: asks, then deletes
