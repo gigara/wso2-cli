@@ -65,6 +65,35 @@ const DefaultDiagnosticLimit = 8 << 10
 // module hold the shell open by asking.
 const MaxAccessRequests = 8
 
+// MaxConfirmations is how many times one invocation may ask the person
+// running the command to confirm something before the shell treats the module
+// as looping rather than working.
+//
+// A destructive command asks once. The allowance leaves room for a command
+// that deletes several things and asks about each, and is small enough that a
+// module cannot hold a terminal open by asking.
+const MaxConfirmations = 8
+
+// Confirmer is the shell's prompt as the session sees it: the one question a
+// module may put to the person running the command.
+//
+// It is an interface so the protocol can be tested without a terminal behind
+// it, and so the session cannot reach past the one thing it is entitled to
+// ask. internal/app implements it over the same prompter as the shell's own
+// confirmations, and decides there whether anything may be asked at all.
+type Confirmer interface {
+	// Confirm puts the question to the person. It returns nil when they
+	// answered yes, and the typed problem to refuse the module with
+	// otherwise: because they answered no, or because nothing may be asked.
+	Confirm(question string) error
+}
+
+// ConfirmerFunc adapts a function to Confirmer.
+type ConfirmerFunc func(question string) error
+
+// Confirm calls f.
+func (f ConfirmerFunc) Confirm(question string) error { return f(question) }
+
 // ShellIdentity is the shell-side identity reported to a module.
 type ShellIdentity struct {
 	// Version is the shell's release version.

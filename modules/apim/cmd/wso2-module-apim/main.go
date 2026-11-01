@@ -139,12 +139,12 @@ func commands() *cobratree.Tree {
 	projectsCommand.AddCommand(projectsCreateCommand)
 
 	projectsDeleteCommand := &cobra.Command{
-		Use:   "delete <project-id> --yes",
-		Short: "Delete a project.",
+		Use:   "delete <project-id> [--yes]",
+		Short: "Delete a project, asking first.",
 	}
 	projectsDeleteFlags := &removalFlags{}
 	projectsDeleteCommand.Flags().BoolVar(&projectsDeleteFlags.yes, "yes", false,
-		"Confirm the deletion, which cannot be undone.")
+		"Delete without asking for confirmation.")
 	projectsCommand.AddCommand(projectsDeleteCommand)
 
 	apisCommand := &cobra.Command{
@@ -194,12 +194,12 @@ func commands() *cobratree.Tree {
 	apisCommand.AddCommand(apisUndeployCommand)
 
 	apisDeleteCommand := &cobra.Command{
-		Use:   "delete <api-id> --yes",
-		Short: "Undeploy an API everywhere and delete it.",
+		Use:   "delete <api-id> [--yes]",
+		Short: "Undeploy an API everywhere and delete it, asking first.",
 	}
 	apisDeleteFlags := &removalFlags{}
 	apisDeleteCommand.Flags().BoolVar(&apisDeleteFlags.yes, "yes", false,
-		"Confirm the deletion, which cannot be undone.")
+		"Delete without asking for confirmation.")
 	apisCommand.AddCommand(apisDeleteCommand)
 
 	apisInvokeCommand := &cobra.Command{

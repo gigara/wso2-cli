@@ -137,6 +137,9 @@ mapping. See the [module SDK reference](reference/module-sdk.md).
 The shell owns authentication and every long-lived credential. A module asks
 for access over its own standard input and output (`AcquireAccess`), and the
 shell answers with `AccessGranted` or `AccessDenied`. There is no local port.
+A module confirms a destructive action the same way: it sends `Confirm` with
+its question, and the shell asks it, or refuses to, and answers `Confirmed` or
+`ConfirmationRefused` ([ADR 0021](adr/0021-a-shell-drawn-confirmation-in-the-module-contract.md)).
 
 The broker:
 
@@ -261,7 +264,8 @@ contract.
 5. `Hello` / `Welcome` complete the handshake.
 6. The shell sends one `Invoke` with the command path, arguments, output
    mode, and policy.
-7. The module may send `AcquireAccess` any number of times.
+7. The module may send `AcquireAccess`, and from protocol version 3
+   `Confirm`, any number of times, each bounded by the shell.
 8. The module ends with one `Result` or `Problem`, and the shell renders it
    and exits with the mapped code.
 
@@ -457,7 +461,7 @@ Reintroducing it is not defensive tightening.
 ```text
 $ ws version
 WSO2 CLI   v0.1.0
-Protocol   v2, v1
+Protocol   v3, v2
 Platform   darwin/arm64
 
 Installed modules

@@ -151,12 +151,12 @@ func commands() *cobratree.Tree {
 		"The organization unit that owns it, by id or handle. Defaults to the "+
 			"deployment's only organization unit; required when it records more than one.")
 	resourceServersDeleteCommand := &cobra.Command{
-		Use:   "delete <id-or-identifier> --yes",
-		Short: "Delete a resource server and its permissions.",
+		Use:   "delete <id-or-identifier> [--yes]",
+		Short: "Delete a resource server and its permissions, asking first.",
 	}
 	deleteFlags := resourceServerDeleteFlags{}
 	resourceServersDeleteCommand.Flags().BoolVar(&deleteFlags.yes, "yes", false,
-		"Confirm the deletion, which cannot be undone.")
+		"Delete without asking for confirmation.")
 	resourceServersCommand.AddCommand(resourceServersListCommand, resourceServersCreateCommand,
 		resourceServersDeleteCommand)
 

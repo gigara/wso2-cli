@@ -32,6 +32,7 @@ import (
 	"github.com/wso2/wso2-cli/internal/modules"
 	"github.com/wso2/wso2-cli/internal/state"
 	"github.com/wso2/wso2-cli/sdk/commandtree"
+	"github.com/wso2/wso2-cli/sdk/protocol"
 )
 
 // Module describes one module installation to create.
@@ -52,10 +53,11 @@ type Module struct {
 	// accepts every shell version, including a prerelease development build.
 	ShellRange string
 	// ProtocolVersions are the supported protocol versions. They default to
-	// protocol 1, which is the older end of the shell's window. An
-	// installation whose executable is a real module built against the SDK
-	// must set what that build speaks instead, because the receipt has to
-	// agree with the executable at the handshake.
+	// the older end of the shell's window (OldestProtocol), so a fixture
+	// stays launchable across a protocol bump. An installation whose
+	// executable is a real module built against the SDK must set what that
+	// build speaks instead, because the receipt has to agree with the
+	// executable at the handshake.
 	ProtocolVersions []int
 	// OS and Arch default to the running platform.
 	OS   string
@@ -237,7 +239,7 @@ func (m Module) withDefaults() Module {
 		m.ShellRange = ">=0.0.0-0"
 	}
 	if len(m.ProtocolVersions) == 0 {
-		m.ProtocolVersions = []int{1}
+		m.ProtocolVersions = []int{OldestProtocol()}
 	}
 	if m.OS == "" {
 		m.OS = runtime.GOOS
@@ -269,4 +271,13 @@ func guardIsolatedRoot(storeRoot string) error {
 		return fmt.Errorf("fixture: %w", err)
 	}
 	return nil
+}
+
+// OldestProtocol is the oldest protocol version the shell built from this
+// checkout still speaks: the older end of protocol.Window. A fixture that
+// speaks it is launchable, and a fake module whose handshake offers it
+// matches the receipt the fixture wrote.
+func OldestProtocol() int {
+	window := protocol.Window()
+	return window[len(window)-1]
 }

@@ -321,3 +321,57 @@ func TestRunCarriesArgumentsAndContextToTheHandler(t *testing.T) {
 		t.Errorf("handler saw context %+v, want name dev and org acme", seen.Context)
 	}
 }
+
+// confirmCommand asks the peer to confirm and reports whether it did.
+func confirmCommand() module.Command {
+	return module.Command{
+		Path: []string{"delete"},
+		Run: func(ctx context.Context, request module.Request) (result.Result, error) {
+			if err := request.Prompt.Confirm(ctx, module.ConfirmRequest{Question: "Delete it?"}); err != nil {
+				return result.Result{}, err
+			}
+			return result.New("probe.delete/v1").With("deleted", "Deleted", "yes"), nil
+		},
+	}
+}
+
+func TestRunRefusesAConfirmationTheInvocationDidNotScript(t *testing.T) {
+	// A handler about to delete something must be told yes deliberately, or
+	// a test could pass because the harness was more willing than a person.
+	outcome := testkit.Run(t.Context(), probeOptions(), []module.Command{confirmCommand()},
+		testkit.Invocation{Command: []string{"delete"}})
+
+	if outcome.Err != nil {
+		t.Fatalf("Run failed: %v", outcome.Err)
+	}
+	if outcome.Problem == nil || outcome.Problem.Code != "testkit.confirmation_not_scripted" {
+		t.Fatalf("an unscripted confirmation was answered with %+v", outcome.Problem)
+	}
+	if len(outcome.Confirmations) != 1 || outcome.Confirmations[0].Question != "Delete it?" {
+		t.Fatalf("recorded %+v, want the one question", outcome.Confirmations)
+	}
+}
+
+func TestRunConfirmsWhenTheInvocationScriptsYes(t *testing.T) {
+	outcome := testkit.Run(t.Context(), probeOptions(), []module.Command{confirmCommand()},
+		testkit.Invocation{Command: []string{"delete"}, Confirm: &testkit.Confirmation{}})
+
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("a confirmed command failed: err=%v problem=%v", outcome.Err, outcome.Problem)
+	}
+	if outcome.Result == nil || outcome.Result.Fields[0].Value != "yes" {
+		t.Fatalf("the handler did not act on the confirmation: %+v", outcome.Result)
+	}
+}
+
+func TestRunRefusesAConfirmationWithTheScriptedProblem(t *testing.T) {
+	outcome := testkit.Run(t.Context(), probeOptions(), []module.Command{confirmCommand()},
+		testkit.Invocation{Command: []string{"delete"}, Confirm: &testkit.Confirmation{Refuse: &testkit.Declined}})
+
+	if outcome.Err != nil {
+		t.Fatalf("Run failed: %v", outcome.Err)
+	}
+	if outcome.Problem == nil || *outcome.Problem != testkit.Declined {
+		t.Fatalf("the refusal arrived as %+v, want the scripted one", outcome.Problem)
+	}
+}

@@ -44,6 +44,9 @@ type Session struct {
 	// Broker answers the module's access requests. A session without one
 	// denies access rather than granting it.
 	Broker Broker
+	// Confirmer answers the module's confirmation requests. A session
+	// without one refuses them rather than confirming.
+	Confirmer Confirmer
 	// holdDeadline pauses the launcher's answer deadline while the broker is
 	// consulted, returning what resumes it. A session run over in-memory
 	// streams has no deadline and leaves it nil.
@@ -213,10 +216,10 @@ func (s Session) sendInvoke(writer *protocol.Writer, invocation Invocation) erro
 // readTerminal reads the module's single terminal message and proves nothing
 // follows it.
 //
-// A module may ask the broker for access before it answers, so every message is
-// read until the terminal one arrives. Access requests are the only thing that
-// may precede it: anything else is a module the shell and this release disagree
-// about, and is refused.
+// A module may ask the broker for access, or the person for confirmation,
+// before it answers, so every message is read until the terminal one arrives.
+// Those requests are the only things that may precede it: anything else is a
+// module the shell and this release disagree about, and is refused.
 func (s Session) readTerminal(reader *protocol.Reader, writer *protocol.Writer) (Outcome, error) {
 	var envelope *contractv1.Envelope
 	// issued holds each refusal as the shell would report it. The module was
@@ -224,6 +227,7 @@ func (s Session) readTerminal(reader *protocol.Reader, writer *protocol.Writer) 
 	// here rather than from whatever the module hands back.
 	var issued []problem.Problem
 	requests := 0
+	confirmations := 0
 	for {
 		read, err := reader.ReadEnvelope()
 		if err != nil {
@@ -233,6 +237,37 @@ func (s Session) readTerminal(reader *protocol.Reader, writer *protocol.Writer) 
 			return Outcome{}, processProblem("rpc.invocation_mismatch",
 				fmt.Sprintf("the %q module answered for another invocation", s.namespace()),
 				retryRecovery)
+		}
+		if read.GetConfirm() != nil {
+			// A confirmation is bounded and correlated for the same reasons
+			// an access request is, below.
+			confirmations++
+			if confirmations > MaxConfirmations {
+				return Outcome{}, processProblem("rpc.too_many_confirmations",
+					fmt.Sprintf("the %q module asked for confirmation more than %d times without answering",
+						s.namespace(), MaxConfirmations),
+					retryRecovery)
+			}
+			if read.GetCorrelationId() == "" {
+				return Outcome{}, processProblem("rpc.uncorrelated_confirmation",
+					fmt.Sprintf("the %q module asked for confirmation without a correlation identifier",
+						s.namespace()),
+					retryRecovery)
+			}
+			// The message exists only from the version that defined it. A
+			// module that negotiated an older version and sends it anyway
+			// is speaking a contract it did not declare, and is refused the
+			// way any unknown message under that version would be.
+			if s.Resolved.ProtocolVersion < protocol.ConfirmationVersion {
+				return Outcome{}, processProblem("rpc.unexpected_message",
+					fmt.Sprintf("the %q module asked for confirmation, which module-contract protocol v%d does not carry",
+						s.namespace(), s.Resolved.ProtocolVersion),
+					reinstallRecovery)
+			}
+			if err := s.answerConfirmation(writer, read, &issued); err != nil {
+				return Outcome{}, err
+			}
+			continue
 		}
 		if read.GetAcquireAccess() == nil {
 			envelope = read
@@ -341,6 +376,67 @@ func (s Session) answerAccess(
 			ExpiresAtUnix: grant.ExpiresAt.Unix(),
 		}},
 	})
+}
+
+// answerConfirmation puts one confirmation request to the person and answers
+// it.
+//
+// As with access, the shell answers every request and the answer is always
+// typed. Whether a question may be asked at all is decided behind the
+// Confirmer, not here: this session knows the protocol, not the terminal.
+func (s Session) answerConfirmation(
+	writer *protocol.Writer,
+	envelope *contractv1.Envelope,
+	issued *[]problem.Problem,
+) error {
+	// A person at a prompt takes the shell's time, not the module's, so the
+	// module's deadline is held for as long as they take.
+	release := s.hold()
+	err := s.confirm(envelope.GetConfirm().GetQuestion())
+	release()
+	if err != nil {
+		refusal := s.confirmationRefusal(err)
+		*issued = append(*issued, refusal)
+		return s.write(writer, "the confirmation refusal", &contractv1.Envelope{
+			InvocationId:  s.InvocationID,
+			CorrelationId: envelope.GetCorrelationId(),
+			Message: &contractv1.Envelope_ConfirmationRefused{ConfirmationRefused: &contractv1.ConfirmationRefused{
+				Problem: protocol.EncodeProblem(refusal),
+			}},
+		})
+	}
+	return s.write(writer, "the confirmation", &contractv1.Envelope{
+		InvocationId:  s.InvocationID,
+		CorrelationId: envelope.GetCorrelationId(),
+		Message:       &contractv1.Envelope_Confirmed{Confirmed: &contractv1.Confirmed{}},
+	})
+}
+
+// confirm consults the confirmer, refusing when this invocation has none.
+//
+// A session with no confirmer is a session in which nobody can be asked, so it
+// refuses rather than falling through to a yes.
+func (s Session) confirm(question string) error {
+	if s.Confirmer == nil {
+		return problem.New(problem.CategoryUsage, "shell.non_interactive",
+			fmt.Sprintf("the %q module asked for confirmation, and this command can ask nobody", s.namespace())).
+			WithRecovery("Retry the command. Report the failure if it persists.")
+	}
+	return s.Confirmer.Confirm(question)
+}
+
+// confirmationRefusal renders a confirmer failure as the typed refusal the
+// module is sent. A failure the confirmer did not type still refuses: the
+// action was not confirmed, and reporting it as anything else would let an
+// internal fault look like a yes.
+func (s Session) confirmationRefusal(err error) problem.Problem {
+	var typed problem.Problem
+	if errors.As(err, &typed) {
+		return typed
+	}
+	return problem.New(problem.CategoryUsage, "shell.confirmation_undecided",
+		fmt.Sprintf("the shell could not put the %q module's question to you: %s", s.namespace(), err)).
+		WithRecovery("Retry the command. Report the failure if it persists.")
 }
 
 // hold pauses the answer deadline, when there is one to pause.

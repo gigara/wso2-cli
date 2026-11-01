@@ -190,6 +190,12 @@ func DescribeMessage(envelope *contractv1.Envelope) string {
 		return "a result"
 	case *contractv1.Envelope_Problem:
 		return "a problem"
+	case *contractv1.Envelope_Confirm:
+		return "a confirmation request"
+	case *contractv1.Envelope_Confirmed:
+		return "a confirmation"
+	case *contractv1.Envelope_ConfirmationRefused:
+		return "a confirmation refusal"
 	default:
 		return "a message this release does not recognize"
 	}

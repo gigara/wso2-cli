@@ -23,7 +23,7 @@ one means and what refuses when it is wrong.
   "title": "Identity",
   "compatibility": {
     "shell": ">=0.1.0 <2.0.0",
-    "protocolVersions": [2]
+    "protocolVersions": [3]
   },
   "capabilities": {
     "authAudiences": ["identity-management"],

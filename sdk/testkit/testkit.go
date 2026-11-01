@@ -69,6 +69,10 @@ type Invocation struct {
 	// two accesses, its product's and an API's, is proved to present each
 	// where it belongs.
 	AccessByRecord map[string]*Access
+	// Confirm is the peer's scripted answer to every confirmation request.
+	// A nil Confirm refuses, so a handler that acts on a confirmation it
+	// never arranged fails rather than passing by accident.
+	Confirm *Confirmation
 }
 
 // Access scripts the peer's answer to a module's access request.
@@ -84,6 +88,36 @@ type Access struct {
 	Deny *problem.Problem
 }
 
+// Confirmation scripts the peer's answer to a module's confirmation request.
+//
+// A zero Confirmation answers yes. Refuse answers with that problem instead,
+// which is how the three ways a shell can say no are scripted: Declined for a
+// person who answered no, NonInteractive for a run where nothing may be
+// asked, or a problem of the test's own.
+type Confirmation struct {
+	// Refuse answers the request with this problem instead of confirming.
+	Refuse *problem.Problem
+}
+
+// Declined is the refusal the shell sends when the person answered no, or
+// cancelled the question. Its code and wording are the shell's; the test kit
+// repeats them so a module test asserts what a user would see.
+var Declined = problem.New(problem.CategoryUsage, "shell.cancelled",
+	"the command was not confirmed").
+	WithRecovery("Nothing was changed. Run the command again to start over.")
+
+// NonInteractive is the refusal the shell sends when nothing may be asked,
+// because --no-input, WSO2_NO_INPUT or a standard input that is not a terminal
+// forbade it: the same shell.non_interactive its own destructive commands
+// return, with the command as the user typed it as the subject. The wording
+// here is the --no-input case.
+func NonInteractive(commandLine string) *problem.Problem {
+	refusal := problem.New(problem.CategoryUsage, "shell.non_interactive",
+		commandLine+" needs to be confirmed, and --no-input asked that nothing prompt").
+		WithRecovery("Pass --yes to proceed without a prompt, or drop --no-input to be asked.")
+	return &refusal
+}
+
 // DefaultInvocationID is the invocation identifier used when an invocation does
 // not set one.
 const DefaultInvocationID = "testkit-invocation"
@@ -93,6 +127,12 @@ const DefaultInvocationID = "testkit-invocation"
 var unscripted = problem.New(problem.CategoryAuthPolicy, "testkit.access_not_scripted",
 	"the test kit was not told how to answer this access request").
 	WithRecovery("Set Invocation.Access to the grant or denial the test intends.")
+
+// unscriptedConfirmation refuses a confirmation request an invocation did not
+// arrange an answer for.
+var unscriptedConfirmation = problem.New(problem.CategoryUsage, "testkit.confirmation_not_scripted",
+	"the test kit was not told how to answer this confirmation request").
+	WithRecovery("Set Invocation.Confirm to the answer the test intends.")
 
 // Outcome is everything the peer observed.
 //
@@ -108,6 +148,10 @@ type Outcome struct {
 	// AccessRequests are the access requests the module made, in order. A
 	// module that needed no access made none.
 	AccessRequests []module.AccessRequest
+	// Confirmations are the confirmation requests the module made, in
+	// order. A command given --yes, or one with nothing to confirm, made
+	// none.
+	Confirmations []module.ConfirmRequest
 	// Err reports that the exchange itself failed: the module wrote no
 	// terminal message, wrote an unexpected one, or its serve loop returned
 	// an error.
@@ -205,8 +249,9 @@ func exchange(toModule io.WriteCloser, fromModule io.Reader, options module.Opti
 		return outcome
 	}
 
-	// The module may ask the peer for access before it answers, so every
-	// message is read until the one terminal message arrives.
+	// The module may ask the peer for access or for confirmation before it
+	// answers, so every message is read until the one terminal message
+	// arrives.
 	var terminal *contractv1.Envelope
 	for {
 		envelope, err := reader.ReadEnvelope()
@@ -218,6 +263,16 @@ func exchange(toModule io.WriteCloser, fromModule io.Reader, options module.Opti
 			outcome.Err = fmt.Errorf("testkit: a message carries invocation %q, want %q",
 				envelope.GetInvocationId(), invocationID)
 			return outcome
+		}
+		if question := envelope.GetConfirm(); question != nil {
+			outcome.Confirmations = append(outcome.Confirmations, module.ConfirmRequest{
+				Question: question.GetQuestion(),
+			})
+			if err := answerConfirmation(writer, invocationID, envelope.GetCorrelationId(), invocation.Confirm); err != nil {
+				outcome.Err = err
+				return outcome
+			}
+			continue
 		}
 		request := envelope.GetAcquireAccess()
 		if request == nil {
@@ -279,6 +334,30 @@ func answerAccess(writer *protocol.Writer, invocationID, correlationID string, a
 	}
 	if err := writer.WriteEnvelope(envelope); err != nil {
 		return fmt.Errorf("testkit: cannot answer the module's access request: %w", err)
+	}
+	return nil
+}
+
+// answerConfirmation plays the shell's half of one confirmation exchange.
+//
+// An invocation that scripted no answer refuses. The peer never confirms on
+// its own: a handler about to delete something has to be told yes
+// deliberately, so a test cannot pass because the harness was more willing
+// than a person would be.
+func answerConfirmation(writer *protocol.Writer, invocationID, correlationID string, confirmation *Confirmation) error {
+	if confirmation == nil {
+		confirmation = &Confirmation{Refuse: &unscriptedConfirmation}
+	}
+	envelope := &contractv1.Envelope{InvocationId: invocationID, CorrelationId: correlationID}
+	if confirmation.Refuse != nil {
+		envelope.Message = &contractv1.Envelope_ConfirmationRefused{ConfirmationRefused: &contractv1.ConfirmationRefused{
+			Problem: protocol.EncodeProblem(*confirmation.Refuse),
+		}}
+	} else {
+		envelope.Message = &contractv1.Envelope_Confirmed{Confirmed: &contractv1.Confirmed{}}
+	}
+	if err := writer.WriteEnvelope(envelope); err != nil {
+		return fmt.Errorf("testkit: cannot answer the module's confirmation request: %w", err)
 	}
 	return nil
 }
