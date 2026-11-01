@@ -35,7 +35,7 @@ a child resource gets its own noun level under its parent:
 ws apim api list
 ws apim api create --file <file> --project <project>
 ws apim api deploy <api> --gateway-id <gateway>
-ws apim api delete <api> --yes
+ws apim api delete <api>
 ws apim gateway api list
 ws apim gateway token create <gateway>
 ```
@@ -91,7 +91,7 @@ the whole command tree.
 | One resource | `show <id>` | `get`, `describe`, `view` |
 | A new resource | `create` | `add`, `new` |
 | A change | `update` | `edit`, `set` |
-| Removal | `delete <id> --yes` | `remove`, `rm` |
+| Removal | `delete <id>` | `remove`, `rm` |
 | A product operation | `deploy`, `invoke`, `publish` | A generic verb that hides what happens |
 
 Use a product verb such as `deploy` when it names a distinct operation. Do not
