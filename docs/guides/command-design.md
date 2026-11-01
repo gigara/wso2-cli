@@ -148,10 +148,7 @@ ws apim api delete <api> --no-input    # refused; the recovery names --yes
 
 Use `--yes`, not `--force`: force usually means skipping safety checks,
 which is a different promise. The question comes from the module, which
-alone knows what it is about to delete; the shell only draws it. Until the
-module contract carries a confirm request, a module cannot ask, so it
-refuses without `--yes` the way `ws apim api delete` does today, with the
-`--yes` command as the recovery.
+alone knows what it is about to delete; the shell only draws it.
 
 ### 8. Return data, not text
 
@@ -214,19 +211,16 @@ no login and no network call. The details are under
 ### What each help page shows
 
 Help is read top-down, by people and by agents, one level at a time. Each
-level answers one question and names the command to run next. The first
-column is what the shell renders today; the second is the guideline a module
-writes towards, so that nothing on a page has to be removed when the renderer
-grows into it.
+level answers one question and names the command to run next.
 
-| Page | Shows today | Guideline adds |
-| --- | --- | --- |
-| Root, `ws help` | Core, product, and other commands; shell flags; one closing hint | A start-here block of three commands in order: `ws login`, `ws product install <namespace>`, `ws <namespace> status`. Products published but not installed, marked as such. |
-| Product, `ws apim --help` | Groups; shell flags | One example per group. A next line computed from state: not logged in names `ws login`; no project names `ws apim project create`. The module's `status` command already works this out; reuse it. |
-| Group, `ws apim api` | Actions | The two most common actions as full examples with placeholders: `ws apim api list --project <id>`. |
-| Leaf, `ws apim api create --help` | Flags | Required flags marked. One runnable example. For every id a flag takes, the command that lists the ids: `--project` already says `ws apim project list shows the ids`. |
-| Refusal | Code, cause, recovery command | Keep the recovery a command to paste, never prose about what to do. |
-| Result | Table or JSON | A next line on standard error for a person, and a `next` list in JSON, built from real ids in the result, at most three entries. |
+| Page | Shows |
+| --- | --- |
+| Root, `ws help` | Shell commands grouped as core and other; product namespaces, with products published but not installed marked as such; shell flags; a start-here block of three commands in order: `ws login`, `ws product install <namespace>`, `ws <namespace> status`. |
+| Product, `ws apim --help` | The command groups, one example per group, the shell flags, and a next line computed from state: not logged in names `ws login`; no project names `ws apim project create`. The module's `status` command works the state out; reuse it. |
+| Group, `ws apim api` | The actions, and the two most common as full examples with placeholders: `ws apim api list --project <id>`. |
+| Leaf, `ws apim api create --help` | The flags, required ones marked, one runnable example, and for every id a flag takes, the command that lists the ids: `--project <id>; ws apim project list shows the ids`. |
+| Refusal | The code, the cause, and a recovery that is a command to paste, never prose about what to do. |
+| Result | The table or JSON, then a next line on standard error for a person and a `next` list in JSON, built from real ids in the result, at most three entries. |
 
 The next command is computed, not fixed. "Run `ws login`" on every page is
 noise; `ws apim api deploy <the-id-just-created> --gateway-id <gateway>`
@@ -237,8 +231,8 @@ after a create is navigation.
 An agent reads help the way a new user does, with a context window instead
 of patience. These rules keep one read enough:
 
-- Keep each page under about 1,500 tokens. Root help is about 300 today, so
-  there is room for examples, not for every flag's prose.
+- Keep each page under about 1,500 tokens: room for examples, not for every
+  flag's prose.
 - Mark a required flag as required. An agent does not guess; the refusal when
   one is missing is right, but help should save the round trip.
 - Keep `--output json` one JSON document on standard output, with everything
@@ -249,9 +243,10 @@ of patience. These rules keep one read enough:
 - Fail an unknown word with a code and the nearest help page. No fuzzy
   correction: an agent learns the real command, and a correction that runs
   could change state.
-- Planned, not built: `ws help --output json` renders the recorded command
-  tree with descriptions, flags, required markers, and result fields, so an
-  agent loads the whole tree once instead of walking it with `--help`.
+- Offer the whole tree in one read: `ws help --output json` renders the
+  recorded command tree with descriptions, flags, required markers, and
+  result fields, so an agent loads it once instead of walking it with
+  `--help`.
 
 ## Review a new command
 
