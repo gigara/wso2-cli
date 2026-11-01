@@ -107,12 +107,8 @@ func parseProductArgs(namespace string, declared parsetree.Tree, args []string) 
 	}
 
 	routed := declared.Route(args)
-	// An unmodified Cobra root refuses a plain word that names no subcommand,
-	// and passes one along anywhere below the root. Matching that is what keeps
-	// the shell from refusing a command the module would have run, or running
-	// one it would have refused.
-	if routed.Unrouted != "" && len(routed.Command.Path) == 0 && declared.RootHasChildren() {
-		return productLine{}, unknownProductCommand(namespace, routed.Unrouted, declared)
+	if namesNoCommand(declared, routed) {
+		return productLine{}, unknownProductCommand(namespace, routed, declared)
 	}
 
 	var (
@@ -331,18 +327,46 @@ func asksForHelp(value string, attached bool) bool {
 	return err == nil && asked
 }
 
-// unknownProductCommand reports a word that names no command the module serves.
+// namesNoCommand reports whether the plain word Route could not place is a
+// command that does not exist, rather than an argument to one that does.
+//
+// At the namespace root the answer is Cobra's: an unmodified root refuses a
+// plain word that names no subcommand. Below the root Cobra passes the word
+// along, and the shell does too wherever the command found runs — "apps myapp"
+// is apps with an argument, and refusing it would refuse a line the module
+// itself accepts. A command that runs nothing is the exception. It has only its
+// children to offer, so a word that names none of them is a mistake, and Cobra's
+// own answer there — the group's help page and a successful exit — is the
+// silent parent page docs/guides/command-design.md says an unknown command must
+// never get.
+func namesNoCommand(declared parsetree.Tree, routed parsetree.Routed) bool {
+	if routed.Unrouted == "" || !declared.HasChildren(routed.Command.Path) {
+		return false
+	}
+	return len(routed.Command.Path) == 0 || !routed.Command.Runnable
+}
+
+// unknownProductCommand reports a word that names no command the module serves
+// beneath the command the line reached.
 //
 // Naming it here is the point of the declaration. Before one existed the words
 // went to the module, which answered for itself and could not be asked what it
 // would have accepted, so the shell had nothing to suggest.
-func unknownProductCommand(namespace, typed string, declared parsetree.Tree) problem.Problem {
-	reported := problem.New(problem.CategoryUsage, "shell.unknown_product_command",
-		fmt.Sprintf("the %s module has no %q command", namespace, typed))
-	if closest := closestCommand(declared, typed); closest != "" {
-		return reported.WithRecovery(fmt.Sprintf("Did you mean wso2 %s %s?", namespace, closest))
+func unknownProductCommand(namespace string, routed parsetree.Routed, declared parsetree.Tree) problem.Problem {
+	parent := routed.Command
+	label := commandLabel(namespace, parent)
+	message := fmt.Sprintf("%s has no %q command", label, routed.Unrouted)
+	if len(parent.Path) == 0 {
+		message = fmt.Sprintf("the %s module has no %q command", namespace, routed.Unrouted)
 	}
-	return reported.WithRecovery(fmt.Sprintf("Run wso2 %s --help to see what it does.", namespace))
+	reported := problem.New(problem.CategoryUsage, "shell.unknown_product_command", message)
+	if closest := closestCommand(declared, parent.Path, routed.Unrouted); closest != "" {
+		return reported.WithRecovery(fmt.Sprintf("Did you mean %s %s?", label, closest))
+	}
+	if len(parent.Path) == 0 {
+		return reported.WithRecovery(fmt.Sprintf("Run %s --help to see what it does.", label))
+	}
+	return reported.WithRecovery(fmt.Sprintf("Run %s --help to see its commands.", label))
 }
 
 // suggestionDistance is how far a mistyped word may be from a real command
@@ -351,15 +375,13 @@ func unknownProductCommand(namespace, typed string, declared parsetree.Tree) pro
 // two would be a difference nobody decided on.
 const suggestionDistance = 2
 
-// closestCommand reports the declared command nearest to what was typed, or the
-// empty string when nothing is near enough to be worth offering.
-func closestCommand(declared parsetree.Tree, typed string) string {
+// closestCommand reports the command declared directly beneath parent nearest
+// to what was typed, or the empty string when nothing is near enough to be
+// worth offering.
+func closestCommand(declared parsetree.Tree, parent []string, typed string) string {
 	best, bestDistance := "", 0
-	for _, candidate := range declared.Commands() {
-		if len(candidate.Path) != 1 {
-			continue
-		}
-		name := candidate.Path[0]
+	for _, candidate := range productChildren(declared, parent) {
+		name := candidate.Path[len(candidate.Path)-1]
 		// A product command is offered on the same terms as a built-in one,
 		// so the threshold is the one the root command hands Cobra rather
 		// than a second number that could drift from it. Cobra keeps its own
