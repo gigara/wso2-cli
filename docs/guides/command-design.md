@@ -200,6 +200,48 @@ no login and no network call. The details are under
   and flags; it does not display Cobra `Long` or `Example` text. Do not rely on
   those fields to teach an operation until the help renderer supports them.
 
+### What each help page shows
+
+Help is read top-down, by people and by agents, one level at a time. Each
+level answers one question and names the command to run next. The first
+column is what the shell renders today; the second is the guideline a module
+writes towards, so that nothing on a page has to be removed when the renderer
+grows into it.
+
+| Page | Shows today | Guideline adds |
+| --- | --- | --- |
+| Root, `ws help` | Core, product, and other commands; shell flags; one closing hint | A start-here block of three commands in order: `ws login`, `ws product install <namespace>`, `ws <namespace> status`. Products published but not installed, marked as such. |
+| Product, `ws apim --help` | Groups; shell flags | One example per group. A next line computed from state: not logged in names `ws login`; no project names `ws apim project create`. The module's `status` command already works this out; reuse it. |
+| Group, `ws apim api` | Actions | The two most common actions as full examples with placeholders: `ws apim api list --project <id>`. |
+| Leaf, `ws apim api create --help` | Flags | Required flags marked. One runnable example. For every id a flag takes, the command that lists the ids: `--project` already says `ws apim project list shows the ids`. |
+| Refusal | Code, cause, recovery command | Keep the recovery a command to paste, never prose about what to do. |
+| Result | Table or JSON | A next line on standard error for a person, and a `next` list in JSON, built from real ids in the result, at most three entries. |
+
+The next command is computed, not fixed. "Run `ws login`" on every page is
+noise; `ws apim api deploy <the-id-just-created> --gateway-id <gateway>`
+after a create is navigation.
+
+### Help for agents
+
+An agent reads help the way a new user does, with a context window instead
+of patience. These rules keep one read enough:
+
+- Keep each page under about 1,500 tokens. Root help is about 400 today, so
+  there is room for examples, not for every flag's prose.
+- Mark a required flag as required. An agent does not guess; the refusal when
+  one is missing is right, but help should save the round trip.
+- Keep `--output json` one JSON document on standard output, with everything
+  else on standard error. The shell does this already.
+- Keep progressive disclosure: root lists namespaces, product lists groups,
+  group lists actions, leaf lists flags. Nothing on one level repeats the
+  level above.
+- Fail an unknown word with a code and the nearest help page. No fuzzy
+  correction: an agent learns the real command, and a correction that runs
+  could change state.
+- Planned, not built: `ws help --output json` renders the recorded command
+  tree with descriptions, flags, required markers, and result fields, so an
+  agent loads the whole tree once instead of walking it with `--help`.
+
 ## Review a new command
 
 Before merging, check these points against both the command tree and its docs:
