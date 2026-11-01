@@ -97,7 +97,7 @@ func (s Shell) invokeModule(namespace string, resolved modules.Resolved, args []
 	// help is the useful answer. Launching the module to be told the command
 	// does not exist would be a worse account of a command that plainly does.
 	if declared.Declared() && (line.help || !line.declared.Runnable) {
-		return s.renderProductHelp(namespace, declared, line.declared)
+		return s.renderProductHelp(namespace, declared, line.declared, resolved.Receipt.Capabilities.Product)
 	}
 	// A module that declares no tree cannot have the question answered for it,
 	// and forwarding it launched a module that refused its own --help as an

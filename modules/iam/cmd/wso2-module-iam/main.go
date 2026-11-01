@@ -107,35 +107,49 @@ func moduleOptions() module.Options {
 // here exactly as they would be in a standalone CLI. What differs is the
 // ending, because a handler returns fields instead of printing them.
 func commands() *cobratree.Tree {
+	// Every command declares an Example: the one line that runs it, with
+	// placeholders for what the reader supplies. The shell shows a leaf's on
+	// its page, a group's on the group's, and the root's as the next step
+	// once the product is set up, all from the declared tree and with no
+	// module launched. A flag a command refuses to run without is marked
+	// required, which the shell shows and the SDK enforces.
 	root := &cobra.Command{
-		Use:   Namespace,
-		Short: "Work with WSO2 Identity Platform: users, apps, and resource servers.",
+		Use:     Namespace,
+		Short:   "Work with WSO2 Identity Platform: users, apps, and resource servers.",
+		Example: "  wso2 iam user list",
 	}
 	statusCommand := &cobra.Command{
-		Use:   "status",
-		Short: "Report this module's own status and what to run first.",
+		Use:     "status",
+		Short:   "Report this module's own status and what to run first.",
+		Example: "  wso2 iam status",
 	}
 	usersCommand := &cobra.Command{
-		Use:   "user",
-		Short: "Read the people this deployment knows.",
+		Use:     "user",
+		Short:   "Read the people this deployment knows.",
+		Example: "  wso2 iam user list",
 	}
 	usersListCommand := &cobra.Command{
-		Use:   "list",
-		Short: "List the users the deployment records.",
+		Use:     "list",
+		Short:   "List the users the deployment records.",
+		Example: "  wso2 iam user list",
 	}
 	usersCommand.AddCommand(usersListCommand)
 
 	resourceServersCommand := &cobra.Command{
 		Use:   "resource-server",
 		Short: "Read, create and delete the resource servers products are known by.",
+		Example: "  wso2 iam resource-server list\n" +
+			"  wso2 iam resource-server create <name> --identifier <uri>",
 	}
 	resourceServersListCommand := &cobra.Command{
-		Use:   "list",
-		Short: "List the resource servers the deployment records.",
+		Use:     "list",
+		Short:   "List the resource servers the deployment records.",
+		Example: "  wso2 iam resource-server list",
 	}
 	resourceServersCreateCommand := &cobra.Command{
-		Use:   "create <name> --identifier <uri>",
-		Short: "Create a resource server a product's access is bound to.",
+		Use:     "create <name> --identifier <uri>",
+		Short:   "Create a resource server a product's access is bound to.",
+		Example: "  wso2 iam resource-server create <name> --identifier <uri>",
 	}
 	// Declared on the command rather than parsed by hand: the SDK parses a
 	// module's own arguments with this flag set before the handler runs, so a
@@ -150,9 +164,15 @@ func commands() *cobratree.Tree {
 	resourceServersCreateCommand.Flags().StringVar(&createFlags.ou, "ou", "",
 		"The organization unit that owns it, by id or handle. Defaults to the "+
 			"deployment's only organization unit; required when it records more than one.")
+	if err := resourceServersCreateCommand.MarkFlagRequired("identifier"); err != nil {
+		// Only a flag the command never declared fails here, which is a
+		// programming error in this file and not a runtime condition.
+		panic(err)
+	}
 	resourceServersDeleteCommand := &cobra.Command{
-		Use:   "delete <id-or-identifier> --yes",
-		Short: "Delete a resource server and its permissions.",
+		Use:     "delete <id-or-identifier> --yes",
+		Short:   "Delete a resource server and its permissions; wso2 iam resource-server list shows the ids.",
+		Example: "  wso2 iam resource-server delete <id-or-identifier> --yes",
 	}
 	deleteFlags := resourceServerDeleteFlags{}
 	resourceServersDeleteCommand.Flags().BoolVar(&deleteFlags.yes, "yes", false,
@@ -161,12 +181,14 @@ func commands() *cobratree.Tree {
 		resourceServersDeleteCommand)
 
 	appsCommand := &cobra.Command{
-		Use:   "app",
-		Short: "Read the applications this deployment registers.",
+		Use:     "app",
+		Short:   "Read the applications this deployment registers.",
+		Example: "  wso2 iam app list",
 	}
 	appsListCommand := &cobra.Command{
-		Use:   "list",
-		Short: "List the applications the deployment records.",
+		Use:     "list",
+		Short:   "List the applications the deployment records.",
+		Example: "  wso2 iam app list",
 	}
 	appsCommand.AddCommand(appsListCommand)
 

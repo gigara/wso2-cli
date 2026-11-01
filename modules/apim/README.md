@@ -34,7 +34,7 @@ at the version every other module in this repository requires, and carries no
 
 | Command | Does |
 | --- | --- |
-| `wso2 apim status` | Reports this module's own status and what to run first. |
+| `wso2 apim status` | Reports this module's own status and what to run first, worked out from where this machine stands: no recorded endpoint names `wso2 context product add apim --url <url>`; a control plane that cannot be reached reports `Reachable no` and names the denial's own recovery (`wso2 login` for a missing session); a reachable one reports the number of `Projects`, naming `wso2 apim project create <name>` when there are none and `wso2 apim api list --project <id>` for the first one otherwise. It exits 0 in every state, because each is a state to describe. |
 | `wso2 apim project list` | Lists the projects the control plane records. |
 | `wso2 apim project create <name> [--description <text>]` | Creates a project, sending only `displayName` (and `description`, when given) — the handle is left for platform-api to auto-generate from the name, per `CreateRESTAPIRequest`'s own schema, rather than this command reimplementing its slug rules. A 409 (a project by this name/handle already exists) is refused naming the project and pointing at `wso2 apim project list`. |
 | `wso2 apim project delete <project-id> --yes` | Deletes a project; `--yes` confirms it as for `api delete`. platform-api refuses a project that still holds APIs and an organization's last project, and the refusal carries its words. |

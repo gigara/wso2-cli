@@ -168,6 +168,35 @@ func nextLine(w io.Writer, next string) error {
 	return err
 }
 
+// marshalPlain encodes a value without escaping HTML characters: a command
+// line's placeholders are written <like-this>, and a script reading the list
+// should be handed them as written rather than as \u003c escapes.
+func marshalPlain(value any) ([]byte, error) {
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(encoded.Bytes(), "\n"), nil
+}
+
+// nextCommandLimit is the most commands a result's next list carries.
+const nextCommandLimit = 3
+
+// nextCommands reports the commands a next step names, as JSON renders them:
+// never null, and never more than nextCommandLimit entries.
+func nextCommands(w io.Writer, next string) []string {
+	commands := Commands(w, next)
+	if commands == nil {
+		return []string{}
+	}
+	if len(commands) > nextCommandLimit {
+		commands = commands[:nextCommandLimit]
+	}
+	return commands
+}
+
 // encodeRows renders a listing's rows as an array of objects keyed by column
 // name.
 //
@@ -204,6 +233,13 @@ func resultJSON(w io.Writer, produced result.Result) error {
 			return fmt.Errorf("output: cannot encode the field name %q: %w", field.Name, err)
 		}
 		value, err := json.Marshal(fieldText(w, field))
+		if field.Name == NextField {
+			// A person reads the next step as a sentence; a script reads it
+			// as the commands to run. JSON carries the list, built from the
+			// real ids the module wrote into the sentence, and at most three
+			// of them: a next step that names more is a page, not a step.
+			value, err = marshalPlain(nextCommands(w, field.Value))
+		}
 		if err != nil {
 			return fmt.Errorf("output: cannot encode the value of %q: %w", field.Name, err)
 		}

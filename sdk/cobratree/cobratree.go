@@ -45,6 +45,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/wso2/wso2-cli/sdk/module"
 	"github.com/wso2/wso2-cli/sdk/problem"
@@ -105,6 +106,12 @@ func (t *Tree) invoke(command *cobra.Command, run module.Handler) module.Handler
 		if err := command.ParseFlags(request.Arguments); err != nil {
 			return result.Result{}, flagProblem(command, err)
 		}
+		// A flag the tree marks required is enforced here, so that the mark
+		// help shows is a promise the command keeps rather than a note the
+		// handler may or may not act on.
+		if err := command.ValidateRequiredFlags(); err != nil {
+			return result.Result{}, requiredFlagProblem(command)
+		}
 		return run(ctx, request)
 	}
 }
@@ -134,6 +141,27 @@ func path(root, command *cobra.Command) []string {
 		names = append(names, reversed[index])
 	}
 	return names
+}
+
+// requiredFlagProblem refuses a command run without a flag it marks required.
+//
+// The recovery is the command's own example when it declares one, because a
+// line to paste answers the refusal where naming the flag only restates it.
+func requiredFlagProblem(command *cobra.Command) problem.Problem {
+	var missing []string
+	command.Flags().VisitAll(func(flag *pflag.Flag) {
+		if requiredFlag(flag) && !flag.Changed {
+			missing = append(missing, "--"+flag.Name)
+		}
+	})
+	path := strings.Join(strings.Fields(command.CommandPath()), " ")
+	recovery := fmt.Sprintf("Run wso2 %s --help to see the flags this command accepts.", path)
+	if examples := strings.Split(strings.TrimSpace(command.Example), "\n"); examples[0] != "" {
+		recovery = "Run " + strings.TrimSpace(examples[0]) + "."
+	}
+	return problem.New(problem.CategoryUsage, "module.flag_required",
+		fmt.Sprintf("wso2 %s needs %s", path, strings.Join(missing, " and "))).
+		WithRecovery(recovery)
 }
 
 // flagProblem reports a flag failure as a typed problem.

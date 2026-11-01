@@ -427,7 +427,7 @@ func (s Shell) helpTopic(root *cobra.Command, args []string) error {
 	if routed.Unrouted != "" && len(routed.Command.Path) == 0 && declared.RootHasChildren() {
 		return unknownProductCommand(namespace, routed.Unrouted, declared)
 	}
-	return s.renderProductHelp(namespace, declared, routed.Command)
+	return s.renderProductHelp(namespace, declared, routed.Command, resolved.Receipt.Capabilities.Product)
 }
 
 // upgradeContexts rewrites a context document an earlier shell wrote in the
