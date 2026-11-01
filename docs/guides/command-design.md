@@ -54,28 +54,127 @@ ws am project list
 
 These are naming examples, not commands currently supplied by an `am` module.
 
-## Names and grammar
+## The rules
 
-- Use a lowercase product namespace assigned in this repository. Use one
-  familiar word for each concept across command names, help, errors, and docs.
-  The domain glossary in [`CONTEXT.md`](../../CONTEXT.md) supplies project terms.
-- Use a singular noun for a resource group: `api`, `user`, or `policy`. The
-  group stays singular for every action, including `list`: `api list`,
-  `api show <api>`, and `user delete <user>`. This matches the shell's own
-  `context`, `product`, and `org` families, so one rule covers the whole
-  command tree. Do not repeat the namespace in a group name: use
-  `am agent list`, not `am am-agent list`.
-- Use an imperative verb for an action. Prefer `list` for a collection,
-  `show` for one resource, `create` for a new resource, `update` for a change,
-  and `delete` for removal. Use a product verb such as `deploy` when it names a
-  distinct operation. Do not introduce `get` beside `show`, or `remove` beside
-  `delete`, for the same operation in one command family.
-- Use lowercase, hyphen-separated words for multiword commands and flags.
-  Use descriptive placeholders in angle brackets for required values and
-  square brackets for optional syntax: `<environment>`, `[<name>]`.
-- Give a flag the same name and meaning wherever the same choice appears.
-  Reserve shell flags such as `--context`, `--output`, `--no-input`, `--help`,
-  and `--verbose` for the shell. Keep secrets out of command-line arguments.
+Ten rules, each with an example that follows it and one that does not. ADR
+0015 (one word per concept in the command surface) is the decision behind
+most of them, and the domain glossary in [`CONTEXT.md`](../../CONTEXT.md)
+supplies the project's terms.
+
+### 1. Namespace, resource, action, in that order
+
+| Do | Don't |
+| --- | --- |
+| `ws apim api list` | `ws apim list-apis` |
+| `ws iam resource-server create <name>` | `ws iam create resource-server <name>` |
+| `ws apim gateway token create <gateway>` | `ws apim create-gateway-token <gateway>` |
+
+A child resource gets its own noun level under its parent. Skip the resource
+noun only when the action applies to the whole product: `ws apim status`.
+
+### 2. Singular nouns, always
+
+| Do | Don't |
+| --- | --- |
+| `ws apim api list` | `ws apim apis list` |
+| `ws iam user delete <user>` | `ws iam users delete <user>` |
+
+The group stays singular for every action, including `list`. This matches
+the shell's own `context`, `product`, and `org` families, so one rule covers
+the whole command tree.
+
+### 3. One verb per operation
+
+| Operation | Verb | Not |
+| --- | --- | --- |
+| A collection | `list` | `ls`, `get-all` |
+| One resource | `show <id>` | `get`, `describe`, `view` |
+| A new resource | `create` | `add`, `new` |
+| A change | `update` | `edit`, `set` |
+| Removal | `delete <id> --yes` | `remove`, `rm` |
+| A product operation | `deploy`, `invoke`, `publish` | A generic verb that hides what happens |
+
+Use a product verb such as `deploy` when it names a distinct operation. Do not
+introduce `get` beside `show`, or `remove` beside `delete`, for the same
+operation in one command family.
+
+### 4. Don't repeat the namespace
+
+| Do | Don't |
+| --- | --- |
+| `ws am agent list` | `ws am am-agent list` |
+| `ws intg component deploy` | `ws intg intg-component deploy` |
+
+### 5. Flags: lowercase, hyphenated, the same name everywhere
+
+| Do | Don't |
+| --- | --- |
+| `--file`, `-f` for an input document | `--filename` here, `--spec` there |
+| `--project <id>` in every command that takes one | `--project-id` in one, `--proj` in another |
+| `--gateway-id <id>` | `--gatewayId` |
+
+Give a flag the same name and meaning wherever the same choice appears. Use
+descriptive placeholders in angle brackets for required values and square
+brackets for optional syntax: `<environment>`, `[<name>]`. Shell flags are
+reserved: a module never declares `--output`, `--context`, `--no-input`,
+`--verbose`, or `--help`. The shell reads them wherever they appear on a
+product command line and never forwards them.
+
+### 6. Secrets never on the command line
+
+| Do | Don't |
+| --- | --- |
+| `--client-secret-variable WSO2_CLIENT_SECRET` | `--client-secret s3cr3t` |
+| `export WSO2_APIM_ADMIN_PASSWORD=...`, then name the variable | `--password ...` |
+
+A module sees only the `WSO2_<NAMESPACE>_*` variables of its own namespace,
+so a secret a command needs reaches it by variable name. A token a command
+returns on purpose, such as `apim api get-token` or `apim gateway register`,
+is shown once, with a note on standard error, and is written nowhere.
+
+### 7. Destructive commands confirm on the command line
+
+A module cannot prompt. Without `--yes` a delete says what it would delete
+and calls nothing; with it, the deletion runs.
+
+```text
+ws apim api delete <api>          # reports, exits 0, deletes nothing
+ws apim api delete <api> --yes    # deletes
+```
+
+### 8. Return data, not text
+
+A command returns a typed result and the shell renders it as a table or as
+JSON, so `--output json` works for every command without the module doing
+anything. A module never writes to standard output: that stream carries
+protocol frames.
+
+```text
+ws apim api list -o json | jq '.[] | select(.status == "DEPLOYED") | .id'
+```
+
+### 9. Errors are typed, with the recovery in the message
+
+| Do | Don't |
+| --- | --- |
+| `apim.not_deployed`: "API x is not deployed. Run ws apim api deploy <api> --gateway-id <gateway>." | `Error: 404` |
+| `apim.not_authorized` on a 403, so an administrator fixes permissions | A retry hint on a permission failure |
+
+Codes are `<namespace>.<snake_case>`, stay stable across releases, and the
+shell maps the problem's category to the exit class (75 for a failure the
+product service reported). See the
+[exit classes](../reference/commands.md#exit-classes).
+
+### 10. Help works offline, and every description starts with a verb
+
+| Do | Don't |
+| --- | --- |
+| "Lists the APIs of one project." | "API listing command" |
+| "Deploys an API to a registered gateway." | "Deploy" |
+
+Help comes from the command tree recorded at installation, so it works with
+no login and no network call. The details are under
+[help behavior](#help-behavior) below.
 
 ## Help behavior
 
@@ -107,13 +206,18 @@ Before merging, check these points against both the command tree and its docs:
 
 1. The owner is correct: shell for shared policy, product namespace for product
    operations.
-2. The path follows namespace, resource, action. Its nouns, verbs, arguments,
-   and flags follow the rules above.
-3. Root, group, and leaf help lead users to the command without login or a
+2. The path follows namespace, singular resource, action. Its nouns, verbs,
+   arguments, and flags follow the rules above, and no operation has two
+   verbs.
+3. Flags reuse existing names, and no secret takes a value on the command
+   line.
+4. Root, group, and leaf help lead users to the command without login or a
    network call. Unknown input fails with a useful suggestion.
-4. Each documented example can be run with the flags and arguments the command
+5. Each documented example can be run with the flags and arguments the command
    declares. The command appears in the module's declared tree, which the
    shell uses to parse and render help.
+6. Every refusal carries a code and a recovery, and a destructive action
+   needs `--yes`.
 
 See the [command reference](../reference/commands.md) for existing shell
 commands and the [module guide](build-module-quickstart.md) for declaring a
