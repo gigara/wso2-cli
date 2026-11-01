@@ -226,7 +226,7 @@ after a create is navigation.
 An agent reads help the way a new user does, with a context window instead
 of patience. These rules keep one read enough:
 
-- Keep each page under about 1,500 tokens. Root help is about 400 today, so
+- Keep each page under about 1,500 tokens. Root help is about 300 today, so
   there is room for examples, not for every flag's prose.
 - Mark a required flag as required. An agent does not guess; the refusal when
   one is missing is right, but help should save the round trip.
