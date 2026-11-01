@@ -132,15 +132,26 @@ so a secret a command needs reaches it by variable name. A token a command
 returns on purpose, such as `apim api get-token` or `apim gateway register`,
 is shown once, with a note on standard error, and is written nowhere.
 
-### 7. Destructive commands confirm on the command line
+### 7. Destructive commands ask, and `--yes` answers in advance
 
-A module cannot prompt. Without `--yes` a delete says what it would delete
-and calls nothing; with it, the deletion runs.
+A destructive command asks at a terminal, naming what is about to go.
+`--yes` answers the question in advance. Under `--no-input`,
+`WSO2_NO_INPUT`, or a standard input that is not a terminal, it is refused
+with `shell.confirmation_required`, exit class 64, and a recovery naming the
+same command with `--yes`. The shell's own `product remove` works this way.
 
 ```text
-ws apim api delete <api>          # reports, exits 0, deletes nothing
-ws apim api delete <api> --yes    # deletes
+ws apim api delete <api>               # at a terminal: asks, then deletes
+ws apim api delete <api> --yes         # deletes without asking
+ws apim api delete <api> --no-input    # refused; the recovery names --yes
 ```
+
+Use `--yes`, not `--force`: force usually means skipping safety checks,
+which is a different promise. The question comes from the module, which
+alone knows what it is about to delete; the shell only draws it. Until the
+module contract carries a confirm request, a module cannot ask, so it
+refuses without `--yes` the way `ws apim api delete` does today, with the
+`--yes` command as the recovery.
 
 ### 8. Return data, not text
 
@@ -259,7 +270,7 @@ Before merging, check these points against both the command tree and its docs:
    declares. The command appears in the module's declared tree, which the
    shell uses to parse and render help.
 6. Every refusal carries a code and a recovery, and a destructive action
-   needs `--yes`.
+   asks, takes `--yes`, and is refused under `--no-input` without it.
 
 See the [command reference](../reference/commands.md) for existing shell
 commands and the [module guide](build-module-quickstart.md) for declaring a
