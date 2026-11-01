@@ -96,7 +96,15 @@ marked with `cobra.MarkFlagRequired` is declared `required`: the shell marks
 it on the command's page, and `cobratree` refuses an invocation without it
 with `module.flag_required`, naming the flag and the command's example, before
 the handler runs. For a flag that takes an id, say in its usage which command
-lists the ids.
+lists the ids. A flag's default (pflag's `DefValue`, with `false`, `0`, `[]`
+and the empty string left out) is declared too.
+
+`cobratree.ResultFields(command, names...)` declares the JSON members a
+command's result carries, in order (`"count", "rows", "next"` for a listing,
+whose rows are the one member `rows`). The shell shows them in `ws help
+--output json`, so an agent knows what a command answers before running it.
+It describes and never enforces: the result the handler returns is what is
+rendered.
 
 The shell asks for that declaration by running the executable once, at install
 time, with `WSO2_MODULE_COMMAND_TREE` set to a file to write. `module.Serve`

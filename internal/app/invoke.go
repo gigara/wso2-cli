@@ -100,6 +100,9 @@ func (s Shell) invokeModule(namespace string, resolved modules.Resolved, args []
 	// children was refused by parseProductArgs, so the page never stands in
 	// for a usage error.
 	if declared.Declared() && (line.help || !line.declared.Runnable) {
+		if line.mode == output.ModeJSON {
+			return s.renderHelpJSON(s.productHelpDocument(namespace, declared, line.declared))
+		}
 		return s.renderProductHelp(namespace, declared, line.declared, resolved.Receipt.Capabilities.Product)
 	}
 	// A module that declares no tree cannot have the question answered for it,

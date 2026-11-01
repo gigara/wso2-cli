@@ -18,6 +18,7 @@ package cobratree
 
 import (
 	"context"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -53,13 +54,14 @@ func (t *Tree) Declare() commandtree.Tree {
 func (t *Tree) declare(command *cobra.Command, path []string, into *[]commandtree.Command) {
 	_, runnable := t.handlers[command]
 	*into = append(*into, commandtree.Command{
-		Path:     path,
-		Short:    command.Short,
-		Example:  command.Example,
-		Runnable: runnable,
-		Hidden:   command.Hidden,
-		Aliases:  append([]string(nil), command.Aliases...),
-		Flags:    declareFlags(command),
+		Path:         path,
+		Short:        command.Short,
+		Example:      command.Example,
+		Runnable:     runnable,
+		Hidden:       command.Hidden,
+		Aliases:      append([]string(nil), command.Aliases...),
+		Flags:        declareFlags(command),
+		ResultFields: declaredResultFields(command),
 	})
 
 	for _, child := range command.Commands() {
@@ -87,6 +89,7 @@ func declareFlags(command *cobra.Command) []commandtree.Flag {
 			Shorthand: flag.Shorthand,
 			Usage:     flag.Usage,
 			Type:      flag.Value.Type(),
+			Default:   flagDefault(flag),
 			Required:  requiredFlag(flag),
 			// Carried verbatim because it is what decides whether the next
 			// argument belongs to this flag. Reading the type instead would
@@ -123,6 +126,44 @@ func declareFlags(command *cobra.Command) []commandtree.Flag {
 		})
 	}
 	return flags
+}
+
+// flagDefault reports the value a flag has when it is not written. A boolean's
+// "false" and an empty string are no default worth declaring, and a slice's
+// "[]" is pflag's spelling of none.
+func flagDefault(flag *pflag.Flag) string {
+	switch flag.DefValue {
+	case "", "false", "[]", "0":
+		return ""
+	}
+	return flag.DefValue
+}
+
+// ResultFieldsAnnotation is the Cobra annotation ResultFields writes, and
+// Declare reads, naming the JSON members a command's result carries.
+const ResultFieldsAnnotation = "wso2.resultFields"
+
+// ResultFields declares the JSON members a command's result carries, in order,
+// so that the shell's machine-readable help can say what the command answers.
+// It records them as an annotation on the command, which is the one place
+// Cobra keeps data beside a command, and Declare reads them from there.
+//
+// It describes, and never enforces: the result the handler returns is what is
+// rendered, whatever was declared here.
+func ResultFields(command *cobra.Command, names ...string) {
+	if command.Annotations == nil {
+		command.Annotations = map[string]string{}
+	}
+	command.Annotations[ResultFieldsAnnotation] = strings.Join(names, ",")
+}
+
+// declaredResultFields reads back what ResultFields recorded.
+func declaredResultFields(command *cobra.Command) []string {
+	recorded, declared := command.Annotations[ResultFieldsAnnotation]
+	if !declared || recorded == "" {
+		return nil
+	}
+	return strings.Split(recorded, ",")
 }
 
 // requiredFlag reports whether the module marked a flag required with
