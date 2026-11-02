@@ -93,13 +93,19 @@ func moduleOptions() module.Options {
 // here exactly as they would be in a standalone CLI. What differs is the
 // ending, because a handler returns fields instead of printing them.
 func commands() *cobratree.Tree {
+	// Every command declares an Example, one runnable line: the shell shows
+	// a leaf's on its help page, a group's on the group's, and the root's as
+	// the next step once the product is set up. Mark a flag the command
+	// cannot run without with MarkFlagRequired, and help marks it.
 	root := &cobra.Command{
-		Use:   Namespace,
-		Short: "{{.Title}} commands for the WSO2 CLI.",
+		Use:     Namespace,
+		Short:   "{{.Title}} commands for the WSO2 CLI.",
+		Example: "  wso2 {{.Namespace}} status",
 	}
 	statusCommand := &cobra.Command{
-		Use:   "status",
-		Short: "Report this module's own status and what to run first.",
+		Use:     "status",
+		Short:   "Report this module's own status and what to run first.",
+		Example: "  wso2 {{.Namespace}} status",
 	}
 	root.AddCommand(statusCommand)
 

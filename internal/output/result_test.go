@@ -168,7 +168,8 @@ func TestParseModeAcceptsOnlyTheRenderingsTheShellSupports(t *testing.T) {
 // TestANextFieldRendersAsATrailingLine pins the one field the table does not
 // hold as a column. A module says what a user most likely runs next in a field
 // named next; a full command there would stretch every column, so it is a line
-// after the table in table mode and an ordinary member in JSON.
+// after the table in table mode, and in JSON it is the list of commands the
+// sentence named, which is what a script runs.
 func TestANextFieldRendersAsATrailingLine(t *testing.T) {
 	produced := result.New("x.y/v1").
 		With("count", "Count", "1").
@@ -188,8 +189,8 @@ func TestANextFieldRendersAsATrailingLine(t *testing.T) {
 	if err := output.Result(&out, output.ModeJSON, produced); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), `"next": "Run wso2 apim api deploy MockAPI/1.0.0."`) {
-		t.Errorf("json lost next:\n%s", out.String())
+	if !strings.Contains(out.String(), `"next": ["wso2 apim api deploy MockAPI/1.0.0"]`) {
+		t.Errorf("json did not carry next as the list of commands to run:\n%s", out.String())
 	}
 
 	out.Reset()
@@ -314,5 +315,33 @@ func TestJSONOutputCarriesEveryRowKeyedByColumn(t *testing.T) {
 	if decoded.Rows[0]["name"] != "System" ||
 		decoded.Rows[0]["identifier"] != "https://localhost:8090/mcp" {
 		t.Fatalf("the first row is not keyed by column name: %+v", decoded.Rows[0])
+	}
+}
+
+// TestANextListCarriesAtMostThreeCommandsAndNeverNull pins the shape of the
+// JSON next member: every command the sentence names, in order, renamed after
+// the shell, cut at three, and an empty list rather than null when the step
+// names no command at all.
+func TestANextListCarriesAtMostThreeCommandsAndNeverNull(t *testing.T) {
+	produced := result.New("x.y/v1").
+		With("id", "ID", "a1").
+		With("next", "Next", "Run wso2 apim api deploy a1 --gateway-id <gateway-id>, then wso2 apim gateway api list, "+
+			"wso2 apim api invoke a1, or wso2 apim api delete a1 --yes.")
+	var out bytes.Buffer
+	if err := output.Result(output.Named(&out, "ws"), output.ModeJSON, produced); err != nil {
+		t.Fatal(err)
+	}
+	want := `"next": ["ws apim api deploy a1 --gateway-id <gateway-id>","ws apim gateway api list","ws apim api invoke a1"]`
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("json next = \n%s\nwant it to contain %s", out.String(), want)
+	}
+
+	out.Reset()
+	prose := result.New("x.y/v1").With("count", "Count", "0").With("next", "Next", "This organization holds no projects yet.")
+	if err := output.Result(&out, output.ModeJSON, prose); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"next": []`) {
+		t.Errorf("a next step naming no command did not render as an empty list:\n%s", out.String())
 	}
 }

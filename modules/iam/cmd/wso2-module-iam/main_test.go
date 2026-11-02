@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/wso2/wso2-cli/sdk/testkit"
@@ -94,5 +95,27 @@ func assertEndsWithNext(t *testing.T, outcome testkit.Outcome) {
 	last := outcome.Result.Fields[len(outcome.Result.Fields)-1]
 	if last.Name != NextField || last.Value == "" {
 		t.Errorf("the result does not end with a next step: %+v", outcome.Result.Fields)
+	}
+}
+
+// TestEveryVisibleCommandDeclaresAnExampleAndCreateMarksItsRequiredFlag pins
+// what the shell's help pages read from this tree: an example on every command
+// a user can reach, and the required mark on resource-server create's
+// --identifier, which the shell shows and the SDK enforces.
+func TestEveryVisibleCommandDeclaresAnExampleAndCreateMarksItsRequiredFlag(t *testing.T) {
+	declared := commands().Declare()
+	for _, command := range declared.Commands {
+		if command.Hidden {
+			continue
+		}
+		if len(command.Examples()) == 0 {
+			t.Errorf("wso2 iam %s declares no example", strings.Join(command.Path, " "))
+		}
+		if strings.Join(command.Path, " ") == "resource-server create" {
+			required := command.RequiredFlags()
+			if len(required) != 1 || required[0].Name != "identifier" {
+				t.Errorf("resource-server create marks %v required, want identifier alone", required)
+			}
+		}
 	}
 }

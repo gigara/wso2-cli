@@ -72,6 +72,16 @@ type Command struct {
 	Path []string `json:"path,omitempty"`
 	// Short is the one-line description, as the module's own help renders it.
 	Short string `json:"short,omitempty"`
+	// Example is what help shows as the command's examples: one runnable
+	// command line per line, placeholders in angle brackets, naming the
+	// default shell. A leaf declares the one line that runs it; a group
+	// declares the two or three actions beneath it a user most often wants;
+	// the namespace's root declares the line to run once the product is set
+	// up, which is what help names as the next step.
+	//
+	// Examples live in the tree so that the shell can show them with no
+	// module launched, the same way it shows descriptions and flags.
+	Example string `json:"example,omitempty"`
 	// Runnable reports whether the module serves this command or only groups
 	// others beneath it. A group is declared so that its path parses and its
 	// help is reachable, and refused as a command to run.
@@ -105,6 +115,9 @@ type Flag struct {
 	// Type is the flag's value type as pflag names it. It reaches a reader as
 	// part of the flag's spelling in help; TakesValue is what the parser asks.
 	Type string `json:"type,omitempty"`
+	// Required reports that the command refuses to run without this flag.
+	// Help marks it so that a reader does not spend a run finding out.
+	Required bool `json:"required,omitempty"`
 	// NoOptDefault is pflag's NoOptDefVal: the value the flag takes when it is
 	// written bare. A flag that has one never consumes the argument after it.
 	//
@@ -153,6 +166,30 @@ func (c Command) canonical() Command {
 		return strings.Compare(a.Name, b.Name)
 	})
 	return c
+}
+
+// Examples reports the command's example lines, one runnable command line
+// each, with blank lines and surrounding space dropped.
+func (c Command) Examples() []string {
+	var lines []string
+	for _, line := range strings.Split(c.Example, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+// RequiredFlags reports the flags the command refuses to run without, in the
+// order the tree keeps them.
+func (c Command) RequiredFlags() []Flag {
+	var required []Flag
+	for _, flag := range c.Flags {
+		if flag.Required {
+			required = append(required, flag)
+		}
+	}
+	return required
 }
 
 // Empty reports whether the tree declares no commands. A module with an empty

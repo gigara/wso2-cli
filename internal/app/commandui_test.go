@@ -630,7 +630,8 @@ func TestHelpOmitsReleasedProductsUnderAConfiguredCatalogOrigin(t *testing.T) {
 }
 
 // TestHelpGroupsCoreProductAndOtherCommands pins the root page ADR 0015 asks
-// for: what a machine can reach, before anything is installed. The products a
+// for: what a machine can reach, before anything is installed, opened by the
+// three commands a new machine runs in order. The products a
 // release knows about sit between the shell commands a user starts with and the
 // ones they reach for later, each named by its title and marked when this
 // machine has not installed it. A product installed without being in the
@@ -649,6 +650,11 @@ func TestHelpGroupsCoreProductAndOtherCommands(t *testing.T) {
 		t.Fatalf("exit code = %d, want %d; stderr: %s", code, exit.OK, errOut)
 	}
 	const want = `Usage: wso2 <command> [arguments]
+
+Start here
+   wso2 login                         Log in to the selected context.
+   wso2 product install <product>     Install a product's commands.
+   wso2 <product> status              Check the product is reachable and what to run first.
 
 Core commands
    context       Set up, select, and inspect the contexts commands run against.

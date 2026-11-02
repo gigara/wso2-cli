@@ -62,8 +62,12 @@ Commands are Cobra commands, built in `commands()` and bound to handlers:
 
 ```go
 func commands() *cobratree.Tree {
-	root := &cobra.Command{Use: Namespace, Short: "ABC commands for the WSO2 CLI."}
-	listCommand := &cobra.Command{Use: "list", Short: "List the things."}
+	root := &cobra.Command{Use: Namespace, Short: "ABC commands for the WSO2 CLI.",
+		Example: "  wso2 abc list --project <id>"}
+	listCommand := &cobra.Command{Use: "list", Short: "List the things.",
+		Example: "  wso2 abc list --project <id>"}
+	listCommand.Flags().String("project", "", "The project; wso2 abc project list shows the ids.")
+	_ = listCommand.MarkFlagRequired("project")
 	root.AddCommand(listCommand)
 
 	return cobratree.New(root).Handle(listCommand, list)
@@ -74,6 +78,13 @@ func commands() *cobratree.Tree {
 declaration is what lets the shell answer `ws abc --help`, suggest a
 correction for a typo, and parse your flags before your program has started.
 Generate it from the Cobra tree; never hand-write a second schema.
+
+Give every command an `Example`, one runnable line with placeholders in angle
+brackets: the shell shows a leaf's on its page, a group's on the group's, and
+the root's as the next step once the product is set up. Mark a flag the
+command cannot run without with `MarkFlagRequired`: help marks it, and the
+SDK refuses an invocation without it before your handler runs. See the
+[module SDK reference](../reference/module-sdk.md#modulecommand).
 
 A handler returns a result:
 
