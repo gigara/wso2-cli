@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/wso2/wso2-cli/internal/auth"
 	"github.com/wso2/wso2-cli/internal/modules"
@@ -412,11 +413,19 @@ func (s Session) answerConfirmation(
 	})
 }
 
-// confirm consults the confirmer, refusing when this invocation has none.
+// confirm consults the confirmer, refusing when this invocation has none or
+// when the module asked nothing.
 //
 // A session with no confirmer is a session in which nobody can be asked, so it
-// refuses rather than falling through to a yes.
+// refuses rather than falling through to a yes. A blank question is refused
+// before anyone is asked: drawn, it would be a bare [y/N] whose yes confirms an
+// action the person was never told about.
 func (s Session) confirm(question string) error {
+	if strings.TrimSpace(question) == "" {
+		return problem.New(problem.CategoryModuleProcess, "rpc.blank_question",
+			fmt.Sprintf("the %q module asked for confirmation without a question", s.namespace())).
+			WithRecovery("Nothing further was done. Report this to the module's maintainers.")
+	}
 	if s.Confirmer == nil {
 		return problem.New(problem.CategoryUsage, "shell.non_interactive",
 			fmt.Sprintf("the %q module asked for confirmation, and this command can ask nobody", s.namespace())).

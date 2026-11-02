@@ -148,6 +148,28 @@ func TestAShellWithNoConfirmerRefusesRatherThanConfirming(t *testing.T) {
 	}
 }
 
+func TestABlankQuestionIsRefusedWithoutAskingAnyone(t *testing.T) {
+	confirmer := &recordingConfirmer{}
+	blank := confirmRequest()
+	blank.GetConfirm().Question = "  "
+
+	_, written, err := runConfirmed(t, confirmer, moduleStream(t, confirmingHello(), blank, statusResult()))
+
+	if err != nil {
+		t.Fatalf("Run returned %v", err)
+	}
+	refused := lastConfirmationAnswer(t, written).GetConfirmationRefused()
+	if refused == nil {
+		t.Fatal("a blank question was confirmed, or left unanswered")
+	}
+	if refused.GetProblem().GetCode() != "rpc.blank_question" {
+		t.Errorf("the refusal is %q, want rpc.blank_question", refused.GetProblem().GetCode())
+	}
+	if len(confirmer.asked) != 0 {
+		t.Errorf("a blank question was still put to the person: %q", confirmer.asked)
+	}
+}
+
 func TestAnUntypedConfirmerFailureStillRefuses(t *testing.T) {
 	confirmer := &recordingConfirmer{refusal: errUnexpected{}}
 

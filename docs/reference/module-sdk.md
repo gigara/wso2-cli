@@ -263,7 +263,10 @@ returns an access denial:
   because `--no-input`, `WSO2_NO_INPUT`, or a standard input that is not a
   terminal forbade it: the same refusal `ws product remove` gives, with the
   command as the user typed it as its subject, and a recovery naming `--yes`
-  beside the one control that fired.
+  beside the one control that fired;
+- `rpc.blank_question` (`module_process`) when the question was blank. The
+  shell asks nobody: drawn, it would be a bare `[y/N]` whose yes confirms an
+  action the person was never told about.
 
 Ask before anything is read or called, so a refused run calls nothing. A
 command gets a `--yes` flag of its own, and when it is set the handler does

@@ -104,7 +104,7 @@ type Confirmation struct {
 // repeats them so a module test asserts what a user would see.
 var Declined = problem.New(problem.CategoryUsage, "shell.cancelled",
 	"the command was not confirmed").
-	WithRecovery("Nothing was changed. Run the command again to start over.")
+	WithRecovery("Nothing further was done. Run the command again to start over.")
 
 // NonInteractive is the refusal the shell sends when nothing may be asked,
 // because --no-input, WSO2_NO_INPUT or a standard input that is not a terminal

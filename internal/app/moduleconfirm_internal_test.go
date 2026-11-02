@@ -70,20 +70,20 @@ func TestAModuleQuestionAnsweredNoIsCancelled(t *testing.T) {
 	if refusal.Code != "shell.cancelled" || refusal.Category != problem.CategoryUsage {
 		t.Fatalf("a no was refused as %s/%s, want usage/shell.cancelled", refusal.Category, refusal.Code)
 	}
-	if !strings.Contains(refusal.Recovery, "Nothing was changed") {
-		t.Errorf("the refusal does not say nothing changed: %q", refusal.Recovery)
+	if !strings.Contains(refusal.Recovery, "Nothing further was done") {
+		t.Errorf("the refusal does not say nothing further was done: %q", refusal.Recovery)
 	}
 }
 
-func TestAModuleQuestionCancelledAtThePromptSaysNothingChanged(t *testing.T) {
+func TestAModuleQuestionCancelledAtThePromptSaysNothingFurtherWasDone(t *testing.T) {
 	// Ctrl+C in the form is wizard.ErrAborted, which only a terminal can
 	// raise; the helper is tested with the error the prompter returns.
 	refusal := refusalOf(t, moduleConfirmationCancelled(wizard.ErrAborted))
 	if refusal.Code != "shell.cancelled" {
 		t.Fatalf("a cancelled question was refused as %s, want shell.cancelled", refusal.Code)
 	}
-	if !strings.Contains(refusal.Recovery, "Nothing was changed") {
-		t.Errorf("the refusal does not say nothing changed: %q", refusal.Recovery)
+	if !strings.Contains(refusal.Recovery, "Nothing further was done") {
+		t.Errorf("the refusal does not say nothing further was done: %q", refusal.Recovery)
 	}
 	if other := errors.New("the terminal went away"); moduleConfirmationCancelled(other) != other {
 		t.Errorf("an error that is not a cancellation was rewritten")
@@ -166,9 +166,25 @@ func TestAModuleQuestionIsRefusedWhereNothingMayBeAsked(t *testing.T) {
 	}
 }
 
-func TestTheProductCommandLineQuotesAnArgumentWithASpace(t *testing.T) {
-	got := productCommandLine("apim", []string{"project", "delete"}, []string{"my project", "--force"})
-	if want := `wso2 apim project delete "my project" --force`; got != want {
-		t.Fatalf("productCommandLine = %q, want %q", got, want)
+// TestTheProductCommandLineIsReadBackAsItWasTyped covers the arguments a
+// shell would not read literally: a space splits a word, a $ and a backtick
+// expand, and a single quote has to survive its own quoting.
+func TestTheProductCommandLineIsReadBackAsItWasTyped(t *testing.T) {
+	for _, testCase := range []struct {
+		arguments []string
+		want      string
+	}{
+		{[]string{"abc", "--yes"}, "wso2 apim project delete abc --yes"},
+		{[]string{"my project", "--force"}, "wso2 apim project delete 'my project' --force"},
+		{[]string{"$HOME"}, "wso2 apim project delete '$HOME'"},
+		{[]string{"`id`"}, "wso2 apim project delete '`id`'"},
+		{[]string{`a\\b"c`}, `wso2 apim project delete 'a\\b"c'`},
+		{[]string{"it's"}, `wso2 apim project delete 'it'\''s'`},
+		{[]string{""}, "wso2 apim project delete ''"},
+	} {
+		got := productCommandLine("apim", []string{"project", "delete"}, testCase.arguments)
+		if got != testCase.want {
+			t.Errorf("productCommandLine(%q) = %q, want %q", testCase.arguments, got, testCase.want)
+		}
 	}
 }
