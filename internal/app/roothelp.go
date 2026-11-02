@@ -40,6 +40,17 @@ var coreCommands = map[string]bool{
 // width Cobra pads a command name to and the one the page has always had.
 const minimumNamePadding = 11
 
+// startHere opens the root page with the three commands a new machine runs,
+// in order, before the sections that list everything. A reader who wants to
+// get somewhere does not have to work the order out from the command list;
+// a reader who knows it scrolls past three lines.
+const startHere = `
+Start here
+   wso2 login                         Log in to the selected context.
+   wso2 product install <product>     Install a product's commands.
+   wso2 <product> status              Check the product is reachable and what to run first.
+`
+
 // helpRow is one line of a root page section: a command or product name and
 // what it does. A row with no name is a sentence standing in for an empty
 // section, and does not widen the name column.
@@ -80,6 +91,7 @@ func (s Shell) rootHelp(root *cobra.Command) (sections, footer string) {
 		}
 	}
 	var page strings.Builder
+	fmt.Fprint(&page, startHere)
 	for _, section := range []struct {
 		title string
 		rows  []helpRow

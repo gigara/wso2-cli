@@ -157,6 +157,64 @@ func TestAMistypedProductCommandIsNamedAndASuggestionOffered(t *testing.T) {
 	}
 }
 
+// groupedTree is a module whose root groups a command that itself only groups
+// others: "api" runs nothing and has "list" beneath it, the shape every product
+// module's resource groups take.
+func groupedTree() parsetree.Tree {
+	return declaring(
+		commandtree.Command{Path: nil},
+		commandtree.Command{Path: []string{"api"}, Short: "Read and design APIs."},
+		commandtree.Command{Path: []string{"api", "list"}, Runnable: true},
+		commandtree.Command{Path: []string{"api", "create"}, Runnable: true},
+	)
+}
+
+// TestAMistypedActionUnderAGroupIsNamedAndASuggestionOffered proves the refusal
+// the namespace root makes reaches a group below it. A group that runs nothing
+// has only its children to offer, so a word that names none of them is a
+// mistake to report, not an argument to shrug into the group's help page.
+func TestAMistypedActionUnderAGroupIsNamedAndASuggestionOffered(t *testing.T) {
+	reported := refusal(t, groupedTree(), "api", "lst")
+
+	if reported.Code != "shell.unknown_product_command" {
+		t.Errorf("the refusal is coded %q", reported.Code)
+	}
+	if !strings.Contains(reported.Message, `"lst"`) || !strings.Contains(reported.Message, "wso2 reference api") {
+		t.Errorf("the refusal does not name the word under its group: %q", reported.Message)
+	}
+	if reported.Recovery != "Did you mean wso2 reference api list?" {
+		t.Errorf("the recovery is %q", reported.Recovery)
+	}
+}
+
+// TestAnUnknownActionUnderAGroupPointsAtTheGroupsHelp pins the recovery when
+// nothing declared is near enough to suggest: the reader is sent to the page
+// for the group they were in, not to the namespace's.
+func TestAnUnknownActionUnderAGroupPointsAtTheGroupsHelp(t *testing.T) {
+	reported := refusal(t, groupedTree(), "api", "frobnicate")
+
+	if reported.Code != "shell.unknown_product_command" {
+		t.Errorf("the refusal is coded %q", reported.Code)
+	}
+	if !strings.Contains(reported.Recovery, "wso2 reference api --help") {
+		t.Errorf("the recovery is %q", reported.Recovery)
+	}
+}
+
+// TestABareGroupStillParsesAsItself pins the other half: with no word after it,
+// a group is the command the line names, so the shell goes on to answer with
+// its actions rather than refusing an absence.
+func TestABareGroupStillParsesAsItself(t *testing.T) {
+	line := parse(t, groupedTree(), "api")
+
+	if strings.Join(line.command, " ") != "api" {
+		t.Errorf("the command is %q", line.command)
+	}
+	if len(line.arguments) != 0 {
+		t.Errorf("the arguments are %q", line.arguments)
+	}
+}
+
 // TestAWordUnderAGroupIsThatGroupsArgument pins fidelity to Cobra at a place
 // where being helpful would be wrong.
 //
@@ -166,6 +224,9 @@ func TestAMistypedProductCommandIsNamedAndASuggestionOffered(t *testing.T) {
 // namespace root and stays out of the way under "apps", because refusing there
 // would refuse a line the module itself would have accepted — the same class of
 // disagreement, pointing the other way, that declaring a tree exists to end.
+// The one place the shell departs from Cobra is a group that runs nothing,
+// which TestAMistypedActionUnderAGroupIsNamedAndASuggestionOffered covers:
+// "apps" runs, so a word under it is its own.
 func TestAWordUnderAGroupIsThatGroupsArgument(t *testing.T) {
 	line := parse(t, referenceTree(), "apps", "myapp")
 

@@ -55,6 +55,7 @@ func (t *Tree) declare(command *cobra.Command, path []string, into *[]commandtre
 	*into = append(*into, commandtree.Command{
 		Path:     path,
 		Short:    command.Short,
+		Example:  command.Example,
 		Runnable: runnable,
 		Hidden:   command.Hidden,
 		Aliases:  append([]string(nil), command.Aliases...),
@@ -86,6 +87,7 @@ func declareFlags(command *cobra.Command) []commandtree.Flag {
 			Shorthand: flag.Shorthand,
 			Usage:     flag.Usage,
 			Type:      flag.Value.Type(),
+			Required:  requiredFlag(flag),
 			// Carried verbatim because it is what decides whether the next
 			// argument belongs to this flag. Reading the type instead would
 			// be right for booleans and wrong for counters.
@@ -121,6 +123,13 @@ func declareFlags(command *cobra.Command) []commandtree.Flag {
 		})
 	}
 	return flags
+}
+
+// requiredFlag reports whether the module marked a flag required with
+// cobra.MarkFlagRequired, which is the one way Cobra lets a tree say so.
+func requiredFlag(flag *pflag.Flag) bool {
+	annotation, marked := flag.Annotations[cobra.BashCompOneRequiredFlag]
+	return marked && len(annotation) > 0 && annotation[0] == "true"
 }
 
 // Serve declares this tree and then serves it, which is the whole of what a

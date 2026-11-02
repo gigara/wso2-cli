@@ -222,3 +222,34 @@ func TestLookupFlagFindsAFlagBySpellingAndShorthand(t *testing.T) {
 		t.Error("the shorthand answered to the long spelling")
 	}
 }
+
+// TestExamplesAndRequiredFlagsAreReadFromTheDeclaration pins the two queries
+// help makes beyond names: a command's example lines with the blank ones and
+// their indentation dropped, and the flags marked required in the order the
+// tree keeps them.
+func TestExamplesAndRequiredFlagsAreReadFromTheDeclaration(t *testing.T) {
+	tree := commandtree.New([]commandtree.Command{{
+		Path:    []string{"create"},
+		Example: "\n  wso2 reference create -f <file> --project <id>\n\n  wso2 reference create -f <file> --project <id> --dry-run\n",
+		Flags: []commandtree.Flag{
+			{Name: "project", Type: "string", Required: true},
+			{Name: "note", Type: "string"},
+			{Name: "file", Type: "string", Required: true},
+		},
+	}})
+	command := tree.Commands[0]
+	examples := command.Examples()
+	if len(examples) != 2 || examples[0] != "wso2 reference create -f <file> --project <id>" {
+		t.Errorf("Examples() = %q, want two trimmed lines", examples)
+	}
+	var required []string
+	for _, flag := range command.RequiredFlags() {
+		required = append(required, flag.Name)
+	}
+	if len(required) != 2 || required[0] != "file" || required[1] != "project" {
+		t.Errorf("RequiredFlags() = %v, want file then project", required)
+	}
+	if (commandtree.Command{}).Examples() != nil {
+		t.Error("a command with no example reports lines")
+	}
+}

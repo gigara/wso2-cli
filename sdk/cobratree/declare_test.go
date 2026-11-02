@@ -19,6 +19,7 @@ package cobratree_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -244,4 +245,46 @@ func sameCommand(a, b commandtree.Command) bool {
 
 func noop(context.Context, module.Request) (result.Result, error) {
 	return result.Result{}, nil
+}
+
+// TestDeclareCarriesACommandsExampleAndItsRequiredFlags proves the two things
+// help shows beyond names and descriptions reach the declaration: a command's
+// Example text verbatim, and a required mark on every flag the tree marked
+// with cobra.MarkFlagRequired. Both are read from the Cobra tree itself, so a
+// module cannot show one thing and enforce another.
+func TestDeclareCarriesACommandsExampleAndItsRequiredFlags(t *testing.T) {
+	root := &cobra.Command{Use: "reference"}
+	create := &cobra.Command{
+		Use:     "create",
+		Example: "  wso2 reference create -f <file> --project <id>\n",
+	}
+	create.Flags().StringP("file", "f", "", "The file.")
+	create.Flags().String("project", "", "The project.")
+	create.Flags().String("note", "", "A note.")
+	for _, name := range []string{"file", "project"} {
+		if err := create.MarkFlagRequired(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root.AddCommand(create)
+
+	declared := cobratree.New(root).Handle(create, noop).Declare()
+
+	leaf, ok := findDeclared(declared, "create")
+	if !ok {
+		t.Fatal("the create command is absent")
+	}
+	if leaf.Example != "  wso2 reference create -f <file> --project <id>\n" {
+		t.Errorf("Example = %q, want it carried verbatim", leaf.Example)
+	}
+	if got := leaf.Examples(); len(got) != 1 || got[0] != "wso2 reference create -f <file> --project <id>" {
+		t.Errorf("Examples() = %q, want the one trimmed line", got)
+	}
+	var required []string
+	for _, flag := range leaf.RequiredFlags() {
+		required = append(required, flag.Name)
+	}
+	if strings.Join(required, ",") != "file,project" {
+		t.Errorf("required flags = %v, want file and project", required)
+	}
 }

@@ -96,8 +96,11 @@ func (s Shell) invokeModule(namespace string, resolved modules.Resolved, args []
 	// because that is what Cobra does with one: there is nothing to run, and
 	// help is the useful answer. Launching the module to be told the command
 	// does not exist would be a worse account of a command that plainly does.
+	// Only the bare group gets here: a word after it that names none of its
+	// children was refused by parseProductArgs, so the page never stands in
+	// for a usage error.
 	if declared.Declared() && (line.help || !line.declared.Runnable) {
-		return s.renderProductHelp(namespace, declared, line.declared)
+		return s.renderProductHelp(namespace, declared, line.declared, resolved.Receipt.Capabilities.Product)
 	}
 	// A module that declares no tree cannot have the question answered for it,
 	// and forwarding it launched a module that refused its own --help as an

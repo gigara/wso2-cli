@@ -630,7 +630,8 @@ func TestHelpOmitsReleasedProductsUnderAConfiguredCatalogOrigin(t *testing.T) {
 }
 
 // TestHelpGroupsCoreProductAndOtherCommands pins the root page ADR 0015 asks
-// for: what a machine can reach, before anything is installed. The products a
+// for: what a machine can reach, before anything is installed, opened by the
+// three commands a new machine runs in order. The products a
 // release knows about sit between the shell commands a user starts with and the
 // ones they reach for later, each named by its title and marked when this
 // machine has not installed it. A product installed without being in the
@@ -649,6 +650,11 @@ func TestHelpGroupsCoreProductAndOtherCommands(t *testing.T) {
 		t.Fatalf("exit code = %d, want %d; stderr: %s", code, exit.OK, errOut)
 	}
 	const want = `Usage: wso2 <command> [arguments]
+
+Start here
+   wso2 login                         Log in to the selected context.
+   wso2 product install <product>     Install a product's commands.
+   wso2 <product> status              Check the product is reachable and what to run first.
 
 Core commands
    context       Set up, select, and inspect the contexts commands run against.
@@ -870,6 +876,68 @@ func TestHelpForAnUnknownProductSubcommandIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "shell.unknown_product_command") {
 		t.Errorf("the unknown subcommand is not named:\n%s", errOut)
+	}
+}
+
+// groupedReferenceTree is the reference product with a group that runs nothing
+// and holds actions, the shape the shell was shrugging an unknown word into.
+func groupedReferenceTree() commandtree.Tree {
+	return commandtree.New([]commandtree.Command{
+		{Path: nil, Short: "Explore the reference product."},
+		{Path: []string{"api"}, Short: "Read and design the APIs."},
+		{Path: []string{"api", "list"}, Runnable: true, Short: "List the APIs."},
+		{Path: []string{"api", "create"}, Runnable: true, Short: "Create an API."},
+	})
+}
+
+// TestAnUnknownActionUnderAProductGroupIsRefused proves the walk refuses a word
+// below a group the same way it refuses one below the namespace, on both the
+// invoking and the help paths. Before this, "api lst" printed the api group's
+// page and exited 0, which docs/guides/command-design.md says an unknown
+// command must never do.
+func TestAnUnknownActionUnderAProductGroupIsRefused(t *testing.T) {
+	for _, args := range [][]string{
+		{"reference", "api", "lst"},
+		{"help", "reference", "api", "lst"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			shell, out, errOut := newShell(t)
+			installFixture(t, shell, fixture.Module{
+				Namespace: "reference", Version: "0.1.0", CommandTree: groupedReferenceTree(),
+			})
+
+			if code := shell.Run(args); code != exit.Usage {
+				t.Fatalf("exit code = %d, want the usage class %d; stdout: %s stderr: %s",
+					code, exit.Usage, out, errOut)
+			}
+			if !strings.Contains(errOut.String(), "shell.unknown_product_command") ||
+				!strings.Contains(errOut.String(), `"lst"`) {
+				t.Errorf("the unknown action is not named:\n%s", errOut)
+			}
+			if !strings.Contains(errOut.String(), "wso2 reference api list") {
+				t.Errorf("the nearest action is not offered:\n%s", errOut)
+			}
+			if out.Len() != 0 {
+				t.Errorf("the group's help page was printed anyway:\n%s", out)
+			}
+		})
+	}
+}
+
+// TestABareProductGroupStillListsItsActions pins what the refusal must not
+// take away: a group named with nothing after it has nothing to run, and its
+// actions are the useful answer, exiting 0.
+func TestABareProductGroupStillListsItsActions(t *testing.T) {
+	shell, out, errOut := newShell(t)
+	installFixture(t, shell, fixture.Module{
+		Namespace: "reference", Version: "0.1.0", CommandTree: groupedReferenceTree(),
+	})
+
+	if code := shell.Run([]string{"reference", "api"}); code != exit.OK {
+		t.Fatalf("exit code = %d, want %d; stderr: %s", code, exit.OK, errOut)
+	}
+	if !strings.Contains(out.String(), "list") || !strings.Contains(out.String(), "create") {
+		t.Errorf("the group's actions are not listed:\n%s", out)
 	}
 }
 

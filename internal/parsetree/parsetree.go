@@ -200,12 +200,13 @@ func (t Tree) PendingValue(args []string) (string, bool) {
 	return string(letters[len(letters)-1]), true
 }
 
-// RootHasChildren reports whether the namespace declares any subcommand. A
-// namespace that does takes a subcommand name where it is given a plain word,
-// and reports an unknown one rather than passing it along, which is what an
-// unmodified Cobra root does.
-func (t Tree) RootHasChildren() bool {
-	return t.declared.HasChildren(nil)
+// HasChildren reports whether the module declares any command beneath a path;
+// nil is the namespace itself. A command that has children takes a child's name
+// where it is given a plain word, so an unknown word there can be reported
+// rather than passed along, which is what an unmodified Cobra root does with
+// one and what the shell does for every group that runs nothing.
+func (t Tree) HasChildren(path []string) bool {
+	return t.declared.HasChildren(path)
 }
 
 // Commands reports every command the module declares that is worth showing a

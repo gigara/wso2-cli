@@ -422,12 +422,12 @@ func (s Shell) helpTopic(root *cobra.Command, args []string) error {
 	}
 	routed := declared.Route(args[1:])
 	// The same refusal parseProductArgs makes for the same words: a plain word
-	// the namespace does not serve is reported, not shrugged into the page for
-	// the whole namespace.
-	if routed.Unrouted != "" && len(routed.Command.Path) == 0 && declared.RootHasChildren() {
-		return unknownProductCommand(namespace, routed.Unrouted, declared)
+	// the namespace or a group does not serve is reported, not shrugged into
+	// the page for the command above it.
+	if namesNoCommand(declared, routed) {
+		return unknownProductCommand(namespace, routed, declared)
 	}
-	return s.renderProductHelp(namespace, declared, routed.Command)
+	return s.renderProductHelp(namespace, declared, routed.Command, resolved.Receipt.Capabilities.Product)
 }
 
 // upgradeContexts rewrites a context document an earlier shell wrote in the

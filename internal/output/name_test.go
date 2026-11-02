@@ -166,15 +166,18 @@ func TestJSONRenamesOnlyTheNextField(t *testing.T) {
 	if err := Result(Named(&buffer, "ws"), ModeJSON, produced); err != nil {
 		t.Fatal(err)
 	}
-	var document map[string]string
+	var document struct {
+		Service string   `json:"service"`
+		Next    []string `json:"next"`
+	}
 	if err := json.Unmarshal(buffer.Bytes(), &document); err != nil {
 		t.Fatalf("invalid JSON %q: %v", buffer.String(), err)
 	}
-	if document["next"] != "Run ws whoami." {
-		t.Errorf("next = %q, want the invoked name", document["next"])
+	if len(document.Next) != 1 || document.Next[0] != "ws whoami" {
+		t.Errorf("next = %q, want the one command under the invoked name", document.Next)
 	}
-	if document["service"] != "wso2 gateway" {
-		t.Errorf("service = %q, want the data value unchanged", document["service"])
+	if document.Service != "wso2 gateway" {
+		t.Errorf("service = %q, want the data value unchanged", document.Service)
 	}
 }
 

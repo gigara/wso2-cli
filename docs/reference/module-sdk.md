@@ -86,6 +86,18 @@ flags, each flag's shorthand and description, and whether a flag carries a
 value. Groups that bind no handler are declared too, because the shell has to
 parse a path through them. Nothing is hand-written and there is no second schema.
 
+Two more things reach the declaration from the same tree, because the shell's
+help pages show them with no module launched. A command's `Example` is carried
+verbatim: write one runnable line per command, placeholders in angle brackets
+(`wso2 apim api create -f <file> --project <id>`); on a group, the two or
+three lines a user most often wants beneath it; on the root, the line to run
+once the product is set up, which the shell names as the next step. A flag
+marked with `cobra.MarkFlagRequired` is declared `required`: the shell marks
+it on the command's page, and `cobratree` refuses an invocation without it
+with `module.flag_required`, naming the flag and the command's example, before
+the handler runs. For a flag that takes an id, say in its usage which command
+lists the ids.
+
 The shell asks for that declaration by running the executable once, at install
 time, with `WSO2_MODULE_COMMAND_TREE` set to a file to write. `module.Serve`
 answers it and exits without opening the protocol. The request arrives in the
@@ -325,8 +337,12 @@ reads, falling back to the name when empty. Build a result with `result.New` and
 `With`, which do not mutate the receiver.
 
 By convention the last field is named `next` and says what a user most likely
-runs next; the shell renders it as a trailing line under the table. The
-generated module follows the convention and its generated test checks it.
+runs next; the shell renders it as a trailing line under the table, and in
+JSON as `next`, the list of the `wso2` commands the sentence names, in order
+and at most three, so a script runs them rather than parsing prose. Build the
+sentence from the real ids in the result (`Run wso2 apim api deploy <the id
+just created> --gateway-id <gateway-id>.`), and it becomes a line to paste.
+The generated module follows the convention and its generated test checks it.
 
 A value that spans lines, such as an API's answer or a document, is not a
 column either: the shell renders it under its label as a block after the
