@@ -177,6 +177,9 @@ func (s Shell) invokeModule(namespace string, resolved modules.Resolved, args []
 		},
 		InvocationID: invocationID,
 		Broker:       broker,
+		// The module's question is asked, or refused, by the same rule as
+		// the shell's own confirmations; see moduleconfirm.go.
+		Confirmer: s.moduleConfirmer(namespace, command, arguments, noInput),
 		// The variables the shell reads its own credentials from, whatever
 		// their names, never reach the module.
 		WithheldEnvironment: credentialVariables(selection.Identity),

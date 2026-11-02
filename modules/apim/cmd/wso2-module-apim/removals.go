@@ -37,9 +37,10 @@ const (
 
 // removalFlags are what a delete command was asked for.
 //
-// A module never prompts — the protocol gives it no terminal to ask on — so a
-// deletion is confirmed on the command line instead: without --yes the command
-// says what it would delete and calls nothing.
+// A module draws no prompt of its own — the protocol gives it no terminal —
+// so without --yes a deletion is confirmed through the shell, which asks the
+// module's question at a terminal and refuses where nothing may be asked. With
+// --yes nothing is asked at all.
 type removalFlags struct {
 	yes bool
 }
@@ -49,14 +50,17 @@ type apisUndeployFlags struct {
 	gatewayID string
 }
 
-// confirmed refuses a deletion that --yes did not confirm, naming what would
-// have been deleted and the command line that deletes it.
-func (f removalFlags) confirmed(what, commandLine string) error {
+// confirmed asks the shell to confirm a deletion that --yes did not, naming
+// what would be deleted, and calls nothing before the answer. The shell's
+// refusal — a no at the prompt, or a run where nothing may be asked, whose
+// recovery names this command with --yes — is returned unchanged.
+func (f removalFlags) confirmed(ctx context.Context, request module.Request, what string) error {
 	if f.yes {
 		return nil
 	}
-	return usageProblem("deleting "+what+" cannot be undone, and --yes did not confirm it",
-		"Run "+commandLine+" --yes to delete it.")
+	return request.Prompt.Confirm(ctx, module.ConfirmRequest{
+		Question: "Delete " + what + "? This cannot be undone.",
+	})
 }
 
 // undeployActive undeploys every deployment of apiID that is still active, on
@@ -132,7 +136,7 @@ func apisUndeploy(command *cobra.Command, flags *apisUndeployFlags) module.Handl
 	}
 }
 
-// apisDelete answers "wso2 apim api delete <api-id> --yes". It undeploys the
+// apisDelete answers "wso2 apim api delete <api-id> [--yes]". It undeploys the
 // API from every gateway first, because deleting it is what the user asked for
 // and an active deployment is the one thing that would leave a gateway serving
 // an API the control plane no longer records.
@@ -140,12 +144,11 @@ func apisDelete(command *cobra.Command, flags *removalFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
 		apiID, err := exactlyOneArgument(command.Flags().Args(),
 			"wso2 apim api delete needs the id of the API to delete",
-			"Run wso2 apim api delete <api-id> --yes. wso2 apim api list shows the ids.")
+			"Run wso2 apim api delete <api-id>. wso2 apim api list shows the ids.")
 		if err != nil {
 			return result.Result{}, err
 		}
-		if err := flags.confirmed("the API "+apiID+" and its deployments",
-			"wso2 apim api delete "+apiID); err != nil {
+		if err := flags.confirmed(ctx, request, "the API "+apiID+" and every deployment of it"); err != nil {
 			return result.Result{}, err
 		}
 		client, err := controlPlane(ctx, request)
@@ -167,16 +170,16 @@ func apisDelete(command *cobra.Command, flags *removalFlags) module.Handler {
 	}
 }
 
-// projectsDelete answers "wso2 apim project delete <project-id> --yes".
+// projectsDelete answers "wso2 apim project delete <project-id> [--yes]".
 func projectsDelete(command *cobra.Command, flags *removalFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
 		projectID, err := exactlyOneArgument(command.Flags().Args(),
 			"wso2 apim project delete needs the id of the project to delete",
-			"Run wso2 apim project delete <project-id> --yes. wso2 apim project list shows the ids.")
+			"Run wso2 apim project delete <project-id>. wso2 apim project list shows the ids.")
 		if err != nil {
 			return result.Result{}, err
 		}
-		if err := flags.confirmed("the project "+projectID, "wso2 apim project delete "+projectID); err != nil {
+		if err := flags.confirmed(ctx, request, "the project "+projectID); err != nil {
 			return result.Result{}, err
 		}
 		client, err := controlPlane(ctx, request)

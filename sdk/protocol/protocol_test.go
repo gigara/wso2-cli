@@ -59,7 +59,7 @@ func TestWindowIsTheCurrentVersionAndItsPredecessor(t *testing.T) {
 		version string
 		want    []int
 	}{
-		{name: "declared", version: original, want: []int{2, 1}},
+		{name: "declared", version: original, want: []int{3, 2}},
 		{name: "first generation has no predecessor", version: "1", want: []int{1}},
 		{name: "later generation", version: "7", want: []int{7, 6}},
 		{name: "unreadable", version: "x", want: nil},

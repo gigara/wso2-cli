@@ -32,8 +32,10 @@ import (
 // resource server.
 const ResourceServerRemovalSchema = "iam.resourceServerRemoval/v1"
 
-// resourceServerDeleteFlags are what delete was asked for. A module never
-// prompts, so --yes on the command line is where a deletion is confirmed.
+// resourceServerDeleteFlags are what delete was asked for. A module draws no
+// prompt of its own, so without --yes the deletion is confirmed through the
+// shell, which asks at a terminal and refuses where nothing may be asked;
+// --yes skips the question.
 type resourceServerDeleteFlags struct {
 	yes bool
 }
@@ -45,7 +47,7 @@ type resourceServerResources struct {
 }
 
 // resourceServersDelete answers "wso2 iam resource-server delete
-// <id-or-identifier> --yes".
+// <id-or-identifier> [--yes]".
 //
 // It takes the identifier as well as the id because the identifier is what
 // the person who created one typed and what every other command shows them as
@@ -53,17 +55,22 @@ type resourceServerResources struct {
 // the deployment will not delete a resource server over, so they go first.
 func resourceServersDelete(command *cobra.Command, flags *resourceServerDeleteFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		const usage = "Run wso2 iam resource-server delete <id-or-identifier> --yes. " +
+		const usage = "Run wso2 iam resource-server delete <id-or-identifier>. " +
 			"wso2 iam resource-server list shows both."
 		positional := command.Flags().Args()
 		if len(positional) != 1 {
 			return result.Result{}, deleteUsageProblem(
 				"wso2 iam resource-server delete needs the one resource server to delete", usage)
 		}
+		// Asked before anything is read, so a run where nothing may be
+		// asked is refused with nothing called; the shell's refusal is
+		// returned unchanged.
 		if !flags.yes {
-			return result.Result{}, deleteUsageProblem(
-				"deleting the resource server "+positional[0]+" cannot be undone, and --yes did not confirm it",
-				"Run wso2 iam resource-server delete "+positional[0]+" --yes to delete it.")
+			if err := request.Prompt.Confirm(ctx, module.ConfirmRequest{
+				Question: "Delete the resource server " + positional[0] + " and its permissions? This cannot be undone.",
+			}); err != nil {
+				return result.Result{}, err
+			}
 		}
 		client, err := clientFor(ctx, request)
 		if err != nil {

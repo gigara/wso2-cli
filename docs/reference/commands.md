@@ -154,6 +154,22 @@ the control that refused and `ws login --only <namespace>` as the way to
 establish that session ahead of time. Whichever of the two asked, the
 module is handed `WSO2_NO_INPUT=1`, so a module reads one spelling.
 
+A product command that deletes something asks first, the way `ws product
+remove` does: the module sends its question over the module contract and the
+shell draws it on standard error, as a form at a terminal and as a `[y/N]`
+line prompt elsewhere, then answers the module (ADR 0021). `--yes` on the
+command line, which is the module's own flag, deletes without asking.
+Answering no, or cancelling, is `shell.cancelled` and exit class `64`, and
+nothing was changed. Under `--no-input`, `WSO2_NO_INPUT`, or a standard
+input that is not a terminal, the shell refuses the question with the same
+`shell.non_interactive` and exit class `64` as `ws product remove`, naming
+the command as typed and the one control that fired, and the module calls
+nothing: `ws apim api delete abc --no-input` is refused with `ws apim api
+delete abc needs to be confirmed, and --no-input asked that nothing prompt`
+and the recovery `Pass --yes to proceed without a prompt, or drop --no-input
+to be asked.` Today `ws apim api delete`, `ws apim project delete` and `ws
+iam resource-server delete` ask.
+
 ## Trusting a deployment's certificate
 
 Every self-hosted product serves TLS with a self-signed certificate on a fresh
@@ -213,7 +229,7 @@ empty variable is not passed at all.
 ```text
 $ ws version
 WSO2 CLI   v0.1.0
-Protocol   v2, v1
+Protocol   v3, v2
 Platform   darwin/arm64
 
 Installed modules

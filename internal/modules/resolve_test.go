@@ -47,8 +47,8 @@ func TestResolveReturnsTheActiveIntegrityCheckedModule(t *testing.T) {
 	if resolved.Receipt.ModuleVersion != "0.1.0" {
 		t.Fatalf("resolved module version = %q, want 0.1.0", resolved.Receipt.ModuleVersion)
 	}
-	if resolved.ProtocolVersion != 1 {
-		t.Fatalf("negotiated protocol = %d, want 1", resolved.ProtocolVersion)
+	if resolved.ProtocolVersion != fixture.OldestProtocol() {
+		t.Fatalf("negotiated protocol = %d, want %d", resolved.ProtocolVersion, fixture.OldestProtocol())
 	}
 	if want := store.VersionDir("reference", "0.1.0"); filepath.Dir(resolved.ExecutablePath) != evalSymlinks(t, want) {
 		t.Fatalf("executable path %q is not inside the version directory %q", resolved.ExecutablePath, want)
@@ -361,7 +361,7 @@ func TestResolveRecomputesTheDigestOnEveryCall(t *testing.T) {
 func shellIdentity() modules.ShellIdentity {
 	return modules.ShellIdentity{
 		Version:          semver.Version{Minor: 1},
-		ProtocolVersions: []int{1},
+		ProtocolVersions: []int{fixture.OldestProtocol()},
 		Platform:         modules.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH},
 	}
 }

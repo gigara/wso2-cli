@@ -154,13 +154,13 @@ func commands() *cobratree.Tree {
 	projectsCommand.AddCommand(projectsCreateCommand)
 
 	projectsDeleteCommand := &cobra.Command{
-		Use:     "delete <project-id> --yes",
-		Short:   "Delete a project; wso2 apim project list shows the ids.",
-		Example: "  wso2 apim project delete <project-id> --yes",
+		Use:     "delete <project-id> [--yes]",
+		Short:   "Delete a project, asking first; wso2 apim project list shows the ids.",
+		Example: "  wso2 apim project delete <project-id>",
 	}
 	projectsDeleteFlags := &removalFlags{}
 	projectsDeleteCommand.Flags().BoolVar(&projectsDeleteFlags.yes, "yes", false,
-		"Confirm the deletion, which cannot be undone.")
+		"Delete without asking for confirmation.")
 	projectsCommand.AddCommand(projectsDeleteCommand)
 
 	apisCommand := &cobra.Command{
@@ -218,13 +218,13 @@ func commands() *cobratree.Tree {
 	apisCommand.AddCommand(apisUndeployCommand)
 
 	apisDeleteCommand := &cobra.Command{
-		Use:     "delete <api-id> --yes",
-		Short:   "Undeploy an API everywhere and delete it; wso2 apim api list shows the ids.",
-		Example: "  wso2 apim api delete <api-id> --yes",
+		Use:     "delete <api-id> [--yes]",
+		Short:   "Undeploy an API everywhere and delete it, asking first; wso2 apim api list shows the ids.",
+		Example: "  wso2 apim api delete <api-id>",
 	}
 	apisDeleteFlags := &removalFlags{}
 	apisDeleteCommand.Flags().BoolVar(&apisDeleteFlags.yes, "yes", false,
-		"Confirm the deletion, which cannot be undone.")
+		"Delete without asking for confirmation.")
 	apisCommand.AddCommand(apisDeleteCommand)
 
 	apisInvokeCommand := &cobra.Command{

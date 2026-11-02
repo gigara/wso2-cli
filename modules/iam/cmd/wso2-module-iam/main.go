@@ -170,13 +170,13 @@ func commands() *cobratree.Tree {
 		panic(err)
 	}
 	resourceServersDeleteCommand := &cobra.Command{
-		Use:     "delete <id-or-identifier> --yes",
-		Short:   "Delete a resource server and its permissions; wso2 iam resource-server list shows the ids.",
-		Example: "  wso2 iam resource-server delete <id-or-identifier> --yes",
+		Use:     "delete <id-or-identifier> [--yes]",
+		Short:   "Delete a resource server and its permissions, asking first; wso2 iam resource-server list shows the ids.",
+		Example: "  wso2 iam resource-server delete <id-or-identifier>",
 	}
 	deleteFlags := resourceServerDeleteFlags{}
 	resourceServersDeleteCommand.Flags().BoolVar(&deleteFlags.yes, "yes", false,
-		"Confirm the deletion, which cannot be undone.")
+		"Delete without asking for confirmation.")
 	resourceServersCommand.AddCommand(resourceServersListCommand, resourceServersCreateCommand,
 		resourceServersDeleteCommand)
 

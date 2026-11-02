@@ -87,6 +87,11 @@ type Request struct {
 	// handler that needs to call a protected service asks it for access; a
 	// handler that does not, never touches it.
 	Access Broker
+	// Prompt is how a handler asks the person running the command to
+	// confirm an action that cannot be undone. The shell draws the question
+	// and decides whether anything may be asked at all; a handler whose
+	// command line carried --yes never touches it.
+	Prompt Confirmer
 }
 
 // Handler runs one product command.
@@ -146,12 +151,14 @@ func ServeStreams(ctx context.Context, in io.Reader, out io.Writer, options Opti
 
 	// The broker shares this invocation's streams, so a handler's access
 	// request travels as an ordinary contract message and the shell answers it
-	// before the terminal message is written.
+	// before the terminal message is written. A confirmation request travels
+	// the same way, through the same value, so its one mutex guarantees one
+	// exchange at a time and no handler can read another's answer.
 	broker := &streamBroker{reader: reader, writer: writer, invocationID: invocationID}
 
 	// From here every outcome is a terminal message, so the shell always has
 	// something typed to render rather than a silent exit.
-	produced, failure := runCommand(ctx, descriptor, commands, invocationID, invoke, broker)
+	produced, failure := runCommand(ctx, descriptor, commands, invocationID, invoke, broker, broker)
 	if failure != nil {
 		return writer.WriteEnvelope(&contractv1.Envelope{
 			InvocationId: invocationID,
@@ -237,6 +244,7 @@ func runCommand(
 	invocationID string,
 	invoke *contractv1.Invoke,
 	broker Broker,
+	prompt Confirmer,
 ) (result.Result, *problem.Problem) {
 	path := invoke.GetCommandPath()
 	handler := findHandler(commands, path)
@@ -261,6 +269,7 @@ func runCommand(
 			GatewayEndpoint: invoke.GetContext().GetGatewayEndpoint(),
 		},
 		Access: broker,
+		Prompt: prompt,
 	}
 
 	produced, err := call(ctx, descriptor, handler, request)
