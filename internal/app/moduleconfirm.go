@@ -44,7 +44,10 @@ func (s Shell) moduleConfirmer(namespace string, command, arguments []string, no
 		if may, reason := s.mayPrompt(noInput); !may {
 			return nonInteractiveConfirmation(commandLine, reason)
 		}
-		confirmed, err := s.confirm(question)
+		// The prompter is asked directly, not through s.confirm: that
+		// helper already turns wizard.ErrAborted into the shell's own
+		// refusal, whose wording moduleConfirmationCancelled replaces.
+		confirmed, err := s.prompter().Confirm(question, false)
 		if err != nil {
 			return moduleConfirmationCancelled(err)
 		}
@@ -65,9 +68,11 @@ func declinedConfirmation() problem.Problem {
 }
 
 // moduleConfirmationCancelled turns a question the person cancelled into the
-// shell's refusal for it. cancelled's wording promises nothing was written,
-// which is true of the shell's own prompts; a module's deletion has not
-// happened either, but "changed" is the word that is true of both.
+// shell's refusal for it. It takes the prompter's error as returned, so
+// wizard.ErrAborted is still visible to errors.Is here; cancelled's wording
+// promises nothing was written, which is true of the shell's own prompts; a
+// module's deletion has not happened either, but "changed" is the word that
+// is true of both.
 func moduleConfirmationCancelled(err error) error {
 	if errors.Is(err, wizard.ErrAborted) {
 		return problem.New(problem.CategoryUsage, "shell.cancelled", "cancelled at a prompt").

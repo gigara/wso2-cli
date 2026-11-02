@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/wso2/wso2-cli/internal/output"
+	"github.com/wso2/wso2-cli/internal/wizard"
 	"github.com/wso2/wso2-cli/sdk/problem"
 )
 
@@ -71,6 +72,21 @@ func TestAModuleQuestionAnsweredNoIsCancelled(t *testing.T) {
 	}
 	if !strings.Contains(refusal.Recovery, "Nothing was changed") {
 		t.Errorf("the refusal does not say nothing changed: %q", refusal.Recovery)
+	}
+}
+
+func TestAModuleQuestionCancelledAtThePromptSaysNothingChanged(t *testing.T) {
+	// Ctrl+C in the form is wizard.ErrAborted, which only a terminal can
+	// raise; the helper is tested with the error the prompter returns.
+	refusal := refusalOf(t, moduleConfirmationCancelled(wizard.ErrAborted))
+	if refusal.Code != "shell.cancelled" {
+		t.Fatalf("a cancelled question was refused as %s, want shell.cancelled", refusal.Code)
+	}
+	if !strings.Contains(refusal.Recovery, "Nothing was changed") {
+		t.Errorf("the refusal does not say nothing changed: %q", refusal.Recovery)
+	}
+	if other := errors.New("the terminal went away"); moduleConfirmationCancelled(other) != other {
+		t.Errorf("an error that is not a cancellation was rewritten")
 	}
 }
 
