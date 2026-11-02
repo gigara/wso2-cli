@@ -102,6 +102,12 @@ type Command struct {
 	// inherits from its parents. They are flattened at extraction so that
 	// answering "does this command take this flag" never walks the tree.
 	Flags []Flag `json:"flags,omitempty"`
+	// ResultFields are the JSON members the command's result carries, in the
+	// order it carries them, for a module that declares them. The shell shows
+	// them in machine-readable help, so an agent knows what a command answers
+	// before running it. Empty for a command that declares none; a result is
+	// still rendered from what the handler returns, never from this.
+	ResultFields []string `json:"resultFields,omitempty"`
 }
 
 // Flag is one flag a command accepts.
@@ -115,6 +121,9 @@ type Flag struct {
 	// Type is the flag's value type as pflag names it. It reaches a reader as
 	// part of the flag's spelling in help; TakesValue is what the parser asks.
 	Type string `json:"type,omitempty"`
+	// Default is the value the flag has when it is not written, as pflag
+	// spells it; empty for a flag with none.
+	Default string `json:"default,omitempty"`
 	// Required reports that the command refuses to run without this flag.
 	// Help marks it so that a reader does not spend a run finding out.
 	Required bool `json:"required,omitempty"`
@@ -153,6 +162,7 @@ func (c Command) canonical() Command {
 	c.Path = slices.Clone(c.Path)
 	c.Aliases = slices.Clone(c.Aliases)
 	c.Flags = slices.Clone(c.Flags)
+	c.ResultFields = slices.Clone(c.ResultFields)
 	for index, flag := range c.Flags {
 		// A boolean written bare is true, which is pflag's own rule and the
 		// reason it never reads the next argument. Filling it in here means a

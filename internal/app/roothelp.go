@@ -126,6 +126,12 @@ func shellCommandRows(root *cobra.Command) (core, other []helpRow) {
 	return core, other
 }
 
+// inventoryUnreadWarning is what every help form says when the installed
+// products could not be read: the table page as its closing line, the JSON
+// document as a warning. Without it a page lists every released product as
+// though it could be run.
+const inventoryUnreadWarning = "The installed products could not be read, so none is marked."
+
 // productRows renders the product section and the lines that close the page,
 // which say how to reach what the section lists.
 func productRows(products []helpProduct, inventoryRead bool) ([]helpRow, string) {
@@ -137,7 +143,7 @@ func productRows(products []helpProduct, inventoryRead bool) ([]helpRow, string)
 		for _, entry := range products {
 			rows = append(rows, helpRow{name: entry.namespace, summary: entry.summary})
 		}
-		return rows, "The installed products could not be read, so none is marked.\n"
+		return rows, inventoryUnreadWarning + "\n"
 	}
 	if len(products) == 0 {
 		return []helpRow{{summary: "No products are installed. Run wso2 product list to see what can be."}}, ""

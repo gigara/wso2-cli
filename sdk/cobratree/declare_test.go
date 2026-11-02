@@ -288,3 +288,52 @@ func TestDeclareCarriesACommandsExampleAndItsRequiredFlags(t *testing.T) {
 		t.Errorf("required flags = %v, want file and project", required)
 	}
 }
+
+// TestDeclareCarriesAFlagsDefaultAndTheResultFieldsACommandDeclares proves
+// the two things machine-readable help shows beyond a flag's spelling: the
+// value a flag has when it is not written, with pflag's "false", "0", "[]"
+// and empty spellings of none left out, and the result members a command
+// declared through ResultFields, in order.
+func TestDeclareCarriesAFlagsDefaultAndTheResultFieldsACommandDeclares(t *testing.T) {
+	root := &cobra.Command{Use: "reference"}
+	list := &cobra.Command{Use: "list"}
+	list.Flags().String("region", "us-east", "The region.")
+	list.Flags().String("project", "", "The project.")
+	list.Flags().Bool("all", false, "Every region.")
+	list.Flags().Int("limit", 0, "At most this many.")
+	list.Flags().StringArray("tag", nil, "A tag.")
+	cobratree.ResultFields(list, "count", "rows", "next")
+	root.AddCommand(list)
+	odd := &cobra.Command{Use: "odd"}
+	cobratree.ResultFields(odd, "a,b", `say "so"`)
+	root.AddCommand(odd)
+
+	declared := cobratree.New(root).Handle(list, noop).Declare()
+
+	leaf, ok := findDeclared(declared, "list")
+	if !ok {
+		t.Fatal("the list command is absent")
+	}
+	defaults := map[string]string{}
+	for _, flag := range leaf.Flags {
+		defaults[flag.Name] = flag.Default
+	}
+	for name, want := range map[string]string{"region": "us-east", "project": "", "all": "", "limit": "", "tag": ""} {
+		if defaults[name] != want {
+			t.Errorf("default of --%s = %q, want %q", name, defaults[name], want)
+		}
+	}
+	if got := strings.Join(leaf.ResultFields, ","); got != "count,rows,next" {
+		t.Errorf("ResultFields = %q, want count,rows,next", got)
+	}
+	plain, _ := findDeclared(declared)
+	if plain.ResultFields != nil {
+		t.Errorf("a command that declared no result fields reports %v", plain.ResultFields)
+	}
+	// A name is read back as it was given, so a comma or a quote in one does
+	// not split or mangle it.
+	if leaf, _ := findDeclared(declared, "odd"); len(leaf.ResultFields) != 2 ||
+		leaf.ResultFields[0] != "a,b" || leaf.ResultFields[1] != `say "so"` {
+		t.Errorf("ResultFields with a comma and a quote = %q, want them intact", leaf.ResultFields)
+	}
+}

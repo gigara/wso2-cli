@@ -301,6 +301,19 @@ func commands() *cobratree.Tree {
 
 	root.AddCommand(statusCommand, projectsCommand, apisCommand, gatewayCommand)
 
+	// The JSON members each result carries, declared so that wso2 help
+	// --output json can say what a command answers before it is run. A
+	// listing's rows are one member, "rows", holding its columns.
+	cobratree.ResultFields(statusCommand, "namespace", "version", "endpoint", "reachable", "projects", NextField)
+	cobratree.ResultFields(projectsListCommand, "count", "rows", NextField)
+	cobratree.ResultFields(projectsCreateCommand, "id", "displayName", "organizationId", NextField)
+	cobratree.ResultFields(apisListCommand, "count", "rows", NextField)
+	cobratree.ResultFields(apisCreateCommand, "id", "displayName", "version", "context", NextField)
+	cobratree.ResultFields(apisDeployCommand, "deploymentId", "apiId", "gatewayId", "status", NextField)
+	cobratree.ResultFields(gatewayRegisterCommand, "id", "displayName", "functionalityType", "endpoints", "token", NextField)
+	cobratree.ResultFields(gatewayTokenCreateCommand, "gatewayId", "token", NextField)
+	cobratree.ResultFields(gatewayApisListCommand, "count", "rows", NextField)
+
 	return cobratree.New(root).
 		Handle(statusCommand, status).
 		Handle(projectsListCommand, projectsList).

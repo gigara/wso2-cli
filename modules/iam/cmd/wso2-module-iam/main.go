@@ -194,6 +194,15 @@ func commands() *cobratree.Tree {
 
 	root.AddCommand(statusCommand, usersCommand, appsCommand, resourceServersCommand)
 
+	// The JSON members each result carries, declared so that wso2 help
+	// --output json can say what a command answers before it is run. A
+	// listing's rows are one member, "rows", holding its columns.
+	cobratree.ResultFields(statusCommand, "namespace", "version", "endpoint", NextField)
+	cobratree.ResultFields(usersListCommand, "count", "rows", NextField)
+	cobratree.ResultFields(appsListCommand, "count", "rows", NextField)
+	cobratree.ResultFields(resourceServersListCommand, "count", "rows", NextField)
+	cobratree.ResultFields(resourceServersCreateCommand, "id", "name", "identifier", "permissions", NextField)
+
 	return cobratree.New(root).
 		Handle(statusCommand, status).
 		Handle(usersListCommand, usersList).
