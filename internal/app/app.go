@@ -375,13 +375,30 @@ func (s Shell) installedProducts(namespaces []string) []installedProduct {
 // module's declared help, the same page invoking it with --help shows, and the
 // words after it walk the declaration so wso2 help <namespace> <subcommand>
 // answers too. Anything else is refused exactly as dispatch refuses it.
-func (s Shell) helpTopic(root *cobra.Command, args []string) error {
+//
+// With --output json the same topic is rendered as one JSON document from the
+// same trees, with nothing launched: the whole tree for a bare wso2 help, a
+// shell command's subtree, or a product's declared tree beneath the command
+// named.
+func (s Shell) helpTopic(help *cobra.Command, args []string) error {
+	root := help.Root()
+	mode, err := s.shellOutputMode(help)
+	if err != nil {
+		return err
+	}
+	asJSON := mode == output.ModeJSON
 	if len(args) == 0 {
+		if asJSON {
+			return s.renderHelpJSON(s.shellHelpDocument(root))
+		}
 		return s.help(root)
 	}
 	if isShellCommand(root, args[0]) {
 		target, rest, err := root.Find(args)
 		if err != nil || target == nil {
+			if asJSON {
+				return s.renderHelpJSON(s.shellHelpDocument(root))
+			}
 			return s.help(root)
 		}
 		// Find stops at the deepest command and hands back what it could not
@@ -393,6 +410,9 @@ func (s Shell) helpTopic(root *cobra.Command, args []string) error {
 			return problem.New(problem.CategoryUsage, "shell.unknown_command",
 				fmt.Sprintf("%q is not a wso2 %s subcommand", rest[0], resolved)).
 				WithRecovery(fmt.Sprintf("Run wso2 help %s to see what it accepts.", resolved))
+		}
+		if asJSON {
+			return s.renderHelpJSON(s.shellCommandHelpDocument(target))
 		}
 		return target.Help()
 	}
@@ -422,12 +442,15 @@ func (s Shell) helpTopic(root *cobra.Command, args []string) error {
 	}
 	routed := declared.Route(args[1:])
 	// The same refusal parseProductArgs makes for the same words: a plain word
-	// the namespace does not serve is reported, not shrugged into the page for
-	// the whole namespace.
-	if routed.Unrouted != "" && len(routed.Command.Path) == 0 && declared.RootHasChildren() {
-		return unknownProductCommand(namespace, routed.Unrouted, declared)
+	// the namespace or a group does not serve is reported, not shrugged into
+	// the page for the command above it.
+	if namesNoCommand(declared, routed) {
+		return unknownProductCommand(namespace, routed, declared)
 	}
-	return s.renderProductHelp(namespace, declared, routed.Command)
+	if asJSON {
+		return s.renderHelpJSON(s.productHelpDocument(namespace, declared, routed.Command))
+	}
+	return s.renderProductHelp(namespace, declared, routed.Command, resolved.Receipt.Capabilities.Product)
 }
 
 // upgradeContexts rewrites a context document an earlier shell wrote in the

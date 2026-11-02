@@ -36,8 +36,8 @@ func TestZeroTreeDeclaresNothing(t *testing.T) {
 	if zero.Declared() {
 		t.Error("the zero Tree reports Declared")
 	}
-	if zero.RootHasChildren() {
-		t.Error("the zero Tree reports RootHasChildren")
+	if zero.HasChildren(nil) {
+		t.Error("the zero Tree reports HasChildren")
 	}
 	if commands := zero.Commands(); len(commands) != 0 {
 		t.Errorf("Commands = %v, want none", commands)
@@ -51,14 +51,22 @@ func TestFromReceiptDeclaredWhenTheTreeHasCommands(t *testing.T) {
 	}
 }
 
-func TestRootHasChildren(t *testing.T) {
-	withChildren := tree(commandtree.Command{Path: nil}, commandtree.Command{Path: []string{"apps"}})
-	if !withChildren.RootHasChildren() {
-		t.Error("RootHasChildren = false, want true")
+func TestHasChildren(t *testing.T) {
+	withChildren := tree(commandtree.Command{Path: nil},
+		commandtree.Command{Path: []string{"apps"}},
+		commandtree.Command{Path: []string{"apps", "list"}})
+	if !withChildren.HasChildren(nil) {
+		t.Error("HasChildren(nil) = false, want true")
+	}
+	if !withChildren.HasChildren([]string{"apps"}) {
+		t.Error("HasChildren(apps) = false, want true")
+	}
+	if withChildren.HasChildren([]string{"apps", "list"}) {
+		t.Error("HasChildren(apps list) = true, want false")
 	}
 	rootOnly := tree(commandtree.Command{Path: nil})
-	if rootOnly.RootHasChildren() {
-		t.Error("RootHasChildren = true, want false")
+	if rootOnly.HasChildren(nil) {
+		t.Error("HasChildren(nil) = true, want false")
 	}
 }
 

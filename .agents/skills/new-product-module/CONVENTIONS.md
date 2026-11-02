@@ -1,6 +1,6 @@
 # Product module code conventions
 
-Repository conventions beyond the [quickstart](../../../docs/guides/build-module-quickstart.md). Use `modules/iam` and `modules/apim` as prior art when a case is uncovered.
+Repository conventions beyond the [quickstart](../../../docs/guides/build-module-quickstart.md). Use `modules/iam` and `modules/apim` on the `preview/product-modules` branch as prior art when a case is uncovered.
 
 ## Layout
 
