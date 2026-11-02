@@ -59,6 +59,27 @@ func Subtle(w io.Writer, text string) string {
 	return subtleStyle + text + resetStyle
 }
 
+// Commands reports the wso2 commands a next step names, in the order they
+// appear and renamed after the shell the writer is named for, with the prose
+// around each one dropped and its trailing punctuation removed. It is what a
+// JSON reader is handed as the next step: lines to run, not a sentence to
+// parse.
+func Commands(w io.Writer, text string) []string {
+	name := NameOf(w)
+	tokens := strings.Split(Rename(text, name), " ")
+	var commands []string
+	for index := 0; index < len(tokens); index++ {
+		if !startsCommand(tokens, index, name) {
+			continue
+		}
+		end, punctuation := commandEnd(tokens, index)
+		command := strings.TrimSuffix(strings.Join(tokens[index:end+1], " "), punctuation)
+		commands = append(commands, command)
+		index = end
+	}
+	return commands
+}
+
 func markCommands(text, name, open, close string) string {
 	tokens := strings.Split(text, " ")
 	marked := make([]string, 0, len(tokens))

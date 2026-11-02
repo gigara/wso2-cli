@@ -310,7 +310,7 @@ func withUnknownField(envelope *contractv1.Envelope) []byte {
 // protocol release has not assigned. A later release would use it for a message
 // kind or a new envelope field; both look like this on the wire.
 func appendUnassignedField(encoded []byte) []byte {
-	const unassignedFieldNumber = 18
+	const unassignedFieldNumber = 99
 	const lengthDelimited = 2
 	var tag [binary.MaxVarintLen64]byte
 	written := binary.PutUvarint(tag[:], uint64(unassignedFieldNumber)<<3|lengthDelimited)

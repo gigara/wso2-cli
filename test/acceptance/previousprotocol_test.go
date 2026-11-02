@@ -137,7 +137,7 @@ func TestThePreviousProtocolGateResolvesThePublishedSDKItsGenerationNames(t *tes
 	current, previous := window[0], window[1]
 
 	proxy := t.TempDir()
-	const wanted = fixturePreviousVersion
+	wanted := fixturePreviousVersion
 	publishSDK(t, proxy, wanted, previous)
 	publishSDK(t, proxy, fixtureCurrentVersion, current)
 
@@ -172,7 +172,7 @@ func TestBreakingThePreviousProtocolFailsTheGate(t *testing.T) {
 
 	clone := cloneRepository(t)
 	proxy := t.TempDir()
-	const sdkVersion = fixturePreviousVersion
+	sdkVersion := fixturePreviousVersion
 	publishSDK(t, proxy, sdkVersion, window[1])
 	breakPreviousProtocol(t, clone)
 
@@ -377,7 +377,9 @@ func cloneRepository(t *testing.T) string {
 	return clone
 }
 
-// The SDK versions the fixtures publish.
+// The SDK versions the fixtures publish, derived from the protocol generation
+// this branch declares: v1.4.0 and v1.5.0 for generation 2, v1.6.0 and v1.7.0
+// for generation 3, and so on.
 //
 // None of them is a version the SDK really publishes, and that is a rule rather
 // than a coincidence. A fixture serves its own zip from a file proxy with
@@ -386,10 +388,23 @@ func cloneRepository(t *testing.T) string {
 // bytes the checksum database does not vouch for, and the next build in the same
 // job that wanted the real module would fail verification — a failure whose
 // message points at the module rather than at the fixture that poisoned it.
-const (
-	fixturePreviousVersion = "v1.4.0"
-	fixtureCurrentVersion  = "v1.5.0"
+//
+// The same cache is why the versions move with the generation. A fixture zip
+// declares the protocol it was published for, and the cache keeps it under its
+// version for every later run on the machine. Fixed versions would then hand a
+// branch that bumped the generation the previous branch's zips, declaring the
+// previous branch's protocols, and the gate would resolve the wrong release
+// for a reason no change to the fixture could fix.
+var (
+	fixturePreviousVersion = fixtureSDKVersion(0)
+	fixtureCurrentVersion  = fixtureSDKVersion(1)
 )
+
+// fixtureSDKVersion names the fixture SDK version at offset 0 or 1 within the
+// pair this branch's protocol generation owns.
+func fixtureSDKVersion(offset int) string {
+	return "v1." + strconv.Itoa(2*protocol.Window()[0]+offset) + ".0"
+}
 
 // TestNoFixtureVersionCollidesWithThePublishedSDK is the rule above, enforced.
 //

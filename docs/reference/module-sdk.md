@@ -4,7 +4,7 @@
 **Related:** [Building a product module](../guides/build-module-quickstart.md),
 [module manifest](module-manifest.md),
 [troubleshooting a module](../guides/troubleshoot-module.md)
-**Last reviewed:** 2026-09-10
+**Last reviewed:** 2026-11-02
 
 What a command handler receives, and what it may return. A module imports the
 public `github.com/wso2/wso2-cli/sdk/...` packages and never a shell `internal/`
@@ -86,6 +86,26 @@ flags, each flag's shorthand and description, and whether a flag carries a
 value. Groups that bind no handler are declared too, because the shell has to
 parse a path through them. Nothing is hand-written and there is no second schema.
 
+Two more things reach the declaration from the same tree, because the shell's
+help pages show them with no module launched. A command's `Example` is carried
+verbatim: write one runnable line per command, placeholders in angle brackets
+(`wso2 apim api create -f <file> --project <id>`); on a group, the two or
+three lines a user most often wants beneath it; on the root, the line to run
+once the product is set up, which the shell names as the next step. A flag
+marked with `cobra.MarkFlagRequired` is declared `required`: the shell marks
+it on the command's page, and `cobratree` refuses an invocation without it
+with `module.flag_required`, naming the flag and the command's example, before
+the handler runs. For a flag that takes an id, say in its usage which command
+lists the ids. A flag's default (pflag's `DefValue`, with `false`, `0`, `[]`
+and the empty string left out) is declared too.
+
+`cobratree.ResultFields(command, names...)` declares the JSON members a
+command's result carries, in order (`"count", "rows", "next"` for a listing,
+whose rows are the one member `rows`). The shell shows them in `ws help
+--output json`, so an agent knows what a command answers before running it.
+It describes and never enforces: the result the handler returns is what is
+rendered.
+
 The shell asks for that declaration by running the executable once, at install
 time, with `WSO2_MODULE_COMMAND_TREE` set to a file to write. `module.Serve`
 answers it and exits without opening the protocol. The request arrives in the
@@ -134,6 +154,7 @@ type Request struct {
 	OutputMode   OutputMode
 	Context      Context
 	Access       Broker
+	Prompt       Confirmer
 }
 ```
 
@@ -148,6 +169,12 @@ same order.
 
 `InvocationID` identifies this invocation and may appear in a module's own
 diagnostics.
+
+`Access` is the shell's authentication broker and `Prompt` is its prompt, the
+one question a module may put to the person running the command. Both are
+interfaces, so a handler can be tested against a stub. [Asking for
+access](#asking-for-access) and [Asking for confirmation](#asking-for-confirmation)
+describe each.
 
 ### `module.Context`
 
@@ -185,7 +212,9 @@ three things back: `WSO2_CA_FILE`, the PEM file of certificates the shell
 trusts beside the system roots, which a module's own HTTP client must honour
 since the shell's trust does not reach a separate process; `WSO2_NO_INPUT=1`
 when `--no-input` or the `WSO2_NO_INPUT` variable asked that nothing prompt or
-open a browser; and every variable named `WSO2_<NAMESPACE>_*` for the module's
+open a browser, which a module reads only to skip work it would otherwise
+wait on, since the shell itself refuses a confirmation under it; and every
+variable named `WSO2_<NAMESPACE>_*` for the module's
 own namespace, upper-cased. That prefix is how a secret the broker cannot
 supply, an administrator password for a one-time bootstrap, reaches a module
 that cannot prompt: the command takes the variable's name as a flag and reads
@@ -252,6 +281,61 @@ says on standard error that the token is stored nowhere.
 
 A denial arrives as a typed problem and should be returned unchanged.
 
+## Asking for confirmation
+
+```go
+type ConfirmRequest struct {
+	Question string
+}
+
+Confirm(ctx context.Context, request ConfirmRequest) error
+```
+
+A command that deletes something asks before it acts, and a module cannot
+draw the question itself: it has no terminal, and standard output carries
+protocol frames. `request.Prompt.Confirm` sends the question to the shell,
+which asks it the way it asks for its own `ws product remove`, on standard
+error, as a form at a terminal and as a `[y/N]` line prompt elsewhere, and
+answers. The module writes the question, because it alone knows what it is
+about to delete: say what will go, and that it cannot be undone, and end with
+a question mark, since the shell adds the yes/no hint.
+
+`Confirm` returns `nil` when the person answered yes. Otherwise it returns a
+typed problem of the shell's, which a handler returns unchanged, exactly as it
+returns an access denial:
+
+- `shell.cancelled` (`usage`, exit 64) when they answered no, or cancelled the
+  question;
+- `shell.non_interactive` (`usage`, exit 64) when nothing could be asked
+  because `--no-input`, `WSO2_NO_INPUT`, or a standard input that is not a
+  terminal forbade it: the same refusal `ws product remove` gives, with the
+  command as the user typed it as its subject, and a recovery naming `--yes`
+  beside the one control that fired;
+- `rpc.blank_question` (`module_process`) when the question was blank. The
+  shell asks nobody: drawn, it would be a bare `[y/N]` whose yes confirms an
+  action the person was never told about.
+
+Ask before anything is read or called, so a refused run calls nothing. A
+command gets a `--yes` flag of its own, and when it is set the handler does
+not call `Confirm` at all: the flag is how a script answers, and the shell's
+refusal names it because every destructive command in the command guideline
+takes it. A command that was asked and refused never acts.
+
+```go
+if !flags.yes {
+	if err := request.Prompt.Confirm(ctx, module.ConfirmRequest{
+		Question: "Delete the API " + apiID + " and every deployment of it? This cannot be undone.",
+	}); err != nil {
+		return result.Result{}, err
+	}
+}
+```
+
+The request exists from module-contract protocol version 3, which is the
+version this SDK declares; a shell that speaks only version 2 refuses to
+install a module built against it rather than failing on its first delete.
+See [ADR 0021](../adr/0021-a-shell-drawn-confirmation-in-the-module-contract.md).
+
 ## Returning a result
 
 ```go
@@ -288,8 +372,12 @@ reads, falling back to the name when empty. Build a result with `result.New` and
 `With`, which do not mutate the receiver.
 
 By convention the last field is named `next` and says what a user most likely
-runs next; the shell renders it as a trailing line under the table. The
-generated module follows the convention and its generated test checks it.
+runs next; the shell renders it as a trailing line under the table, and in
+JSON as `next`, the list of the `wso2` commands the sentence names, in order
+and at most three, so a script runs them rather than parsing prose. Build the
+sentence from the real ids in the result (`Run wso2 apim api deploy <the id
+just created> --gateway-id <gateway-id>.`), and it becomes a line to paste.
+The generated module follows the convention and its generated test checks it.
 
 A value that spans lines, such as an API's answer or a document, is not a
 column either: the shell renders it under its label as a block after the
@@ -416,12 +504,31 @@ Leaving `Invocation.Access` nil denies every request with
 given fails loudly rather than silently. Nothing here needs a real account
 provider.
 
+A confirmation is scripted the same way, through `Invocation.Confirm`, a
+`*testkit.Confirmation`:
+
+```go
+type Confirmation struct {
+	Refuse *problem.Problem
+}
+```
+
+A zero `Confirmation` answers yes. `Refuse` answers with that problem instead:
+`testkit.Declined` is what the shell sends for a no at the prompt, and
+`testkit.NonInteractive(commandLine)` is what it sends where nothing may be
+asked, `shell.non_interactive` with that command line as its subject. Leaving
+`Invocation.Confirm` nil refuses every request with
+`testkit.confirmation_not_scripted`, so a handler about to delete something
+has to be told yes deliberately. The four paths a delete command has, a yes,
+a no, `--yes`, and a run that may not ask, are each one invocation.
+
 ```go
 type Outcome struct {
 	Hello          *contractv1.Hello
 	Result         *result.Result
 	Problem        *problem.Problem
 	AccessRequests []module.AccessRequest
+	Confirmations  []module.ConfirmRequest
 	Err            error
 }
 ```

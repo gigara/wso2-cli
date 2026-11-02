@@ -134,6 +134,9 @@ type Envelope struct {
 	//	*Envelope_AccessDenied
 	//	*Envelope_Result
 	//	*Envelope_Problem
+	//	*Envelope_Confirm
+	//	*Envelope_Confirmed
+	//	*Envelope_ConfirmationRefused
 	Message       isEnvelope_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -262,6 +265,33 @@ func (x *Envelope) GetProblem() *Problem {
 	return nil
 }
 
+func (x *Envelope) GetConfirm() *Confirm {
+	if x != nil {
+		if x, ok := x.Message.(*Envelope_Confirm); ok {
+			return x.Confirm
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetConfirmed() *Confirmed {
+	if x != nil {
+		if x, ok := x.Message.(*Envelope_Confirmed); ok {
+			return x.Confirmed
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetConfirmationRefused() *ConfirmationRefused {
+	if x != nil {
+		if x, ok := x.Message.(*Envelope_ConfirmationRefused); ok {
+			return x.ConfirmationRefused
+		}
+	}
+	return nil
+}
+
 type isEnvelope_Message interface {
 	isEnvelope_Message()
 }
@@ -298,6 +328,18 @@ type Envelope_Problem struct {
 	Problem *Problem `protobuf:"bytes,17,opt,name=problem,proto3,oneof"`
 }
 
+type Envelope_Confirm struct {
+	Confirm *Confirm `protobuf:"bytes,18,opt,name=confirm,proto3,oneof"`
+}
+
+type Envelope_Confirmed struct {
+	Confirmed *Confirmed `protobuf:"bytes,19,opt,name=confirmed,proto3,oneof"`
+}
+
+type Envelope_ConfirmationRefused struct {
+	ConfirmationRefused *ConfirmationRefused `protobuf:"bytes,20,opt,name=confirmation_refused,json=confirmationRefused,proto3,oneof"`
+}
+
 func (*Envelope_Hello) isEnvelope_Message() {}
 
 func (*Envelope_Welcome) isEnvelope_Message() {}
@@ -313,6 +355,12 @@ func (*Envelope_AccessDenied) isEnvelope_Message() {}
 func (*Envelope_Result) isEnvelope_Message() {}
 
 func (*Envelope_Problem) isEnvelope_Message() {}
+
+func (*Envelope_Confirm) isEnvelope_Message() {}
+
+func (*Envelope_Confirmed) isEnvelope_Message() {}
+
+func (*Envelope_ConfirmationRefused) isEnvelope_Message() {}
 
 // Hello is the first message a module sends. It states who is actually running
 // so the shell can compare runtime identity with the module receipt it
@@ -1010,6 +1058,153 @@ func (x *AccessDenied) GetProblem() *Problem {
 	return nil
 }
 
+// Confirm asks the shell to put a yes/no question to the person running the
+// command before the module acts on something that cannot be undone.
+//
+// The module states the question, because it alone knows what it is about to
+// delete; the shell decides whether anything may be asked and how the question
+// is drawn, exactly as for its own destructive commands. A module whose command
+// line carried --yes sends no Confirm at all. Carried since protocol version 3.
+//
+// The envelope's invocation_id binds the request to this invocation and its
+// correlation_id pairs it with the answer.
+type Confirm struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// question is the complete question to put to the person, such as "Delete
+	// the API abc and every deployment of it? This cannot be undone." The shell
+	// draws it verbatim on standard error with its own yes/no hint.
+	Question      string `protobuf:"bytes,1,opt,name=question,proto3" json:"question,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Confirm) Reset() {
+	*x = Confirm{}
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Confirm) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Confirm) ProtoMessage() {}
+
+func (x *Confirm) ProtoReflect() protoreflect.Message {
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Confirm.ProtoReflect.Descriptor instead.
+func (*Confirm) Descriptor() ([]byte, []int) {
+	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *Confirm) GetQuestion() string {
+	if x != nil {
+		return x.Question
+	}
+	return ""
+}
+
+// Confirmed answers Confirm when the person answered yes. It carries nothing:
+// the answer is the message.
+type Confirmed struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Confirmed) Reset() {
+	*x = Confirmed{}
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Confirmed) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Confirmed) ProtoMessage() {}
+
+func (x *Confirmed) ProtoReflect() protoreflect.Message {
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Confirmed.ProtoReflect.Descriptor instead.
+func (*Confirmed) Descriptor() ([]byte, []int) {
+	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{12}
+}
+
+// ConfirmationRefused answers Confirm in every other case: the person answered
+// no or cancelled, or nothing could be asked because --no-input, WSO2_NO_INPUT
+// or a standard input that is not a terminal forbade it.
+//
+// The problem is the shell's, not the module's: the shell owns prompting
+// policy, so it also owns the failure class, the stable code, and the recovery
+// guidance, which names --yes when a prompt was forbidden, exactly as for the
+// shell's own destructive commands. A module returns it unchanged.
+type ConfirmationRefused struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Problem       *Problem               `protobuf:"bytes,1,opt,name=problem,proto3" json:"problem,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmationRefused) Reset() {
+	*x = ConfirmationRefused{}
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmationRefused) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmationRefused) ProtoMessage() {}
+
+func (x *ConfirmationRefused) ProtoReflect() protoreflect.Message {
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmationRefused.ProtoReflect.Descriptor instead.
+func (*ConfirmationRefused) Descriptor() ([]byte, []int) {
+	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ConfirmationRefused) GetProblem() *Problem {
+	if x != nil {
+		return x.Problem
+	}
+	return nil
+}
+
 // Result is a module's terminal success. The module returns semantic fields and
 // the shell alone renders them, so table and JSON output cannot disagree.
 type Result struct {
@@ -1037,7 +1232,7 @@ type Result struct {
 
 func (x *Result) Reset() {
 	*x = Result{}
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[11]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1049,7 +1244,7 @@ func (x *Result) String() string {
 func (*Result) ProtoMessage() {}
 
 func (x *Result) ProtoReflect() protoreflect.Message {
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[11]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1062,7 +1257,7 @@ func (x *Result) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Result.ProtoReflect.Descriptor instead.
 func (*Result) Descriptor() ([]byte, []int) {
-	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{11}
+	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Result) GetSchema() string {
@@ -1107,7 +1302,7 @@ type ResultColumn struct {
 
 func (x *ResultColumn) Reset() {
 	*x = ResultColumn{}
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[12]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1119,7 +1314,7 @@ func (x *ResultColumn) String() string {
 func (*ResultColumn) ProtoMessage() {}
 
 func (x *ResultColumn) ProtoReflect() protoreflect.Message {
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[12]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1132,7 +1327,7 @@ func (x *ResultColumn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultColumn.ProtoReflect.Descriptor instead.
 func (*ResultColumn) Descriptor() ([]byte, []int) {
-	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{12}
+	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ResultColumn) GetName() string {
@@ -1162,7 +1357,7 @@ type ResultRow struct {
 
 func (x *ResultRow) Reset() {
 	*x = ResultRow{}
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[13]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1174,7 +1369,7 @@ func (x *ResultRow) String() string {
 func (*ResultRow) ProtoMessage() {}
 
 func (x *ResultRow) ProtoReflect() protoreflect.Message {
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[13]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1187,7 +1382,7 @@ func (x *ResultRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultRow.ProtoReflect.Descriptor instead.
 func (*ResultRow) Descriptor() ([]byte, []int) {
-	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{13}
+	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ResultRow) GetValues() []string {
@@ -1219,7 +1414,7 @@ type ResultField struct {
 
 func (x *ResultField) Reset() {
 	*x = ResultField{}
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[14]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1231,7 +1426,7 @@ func (x *ResultField) String() string {
 func (*ResultField) ProtoMessage() {}
 
 func (x *ResultField) ProtoReflect() protoreflect.Message {
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[14]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1244,7 +1439,7 @@ func (x *ResultField) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultField.ProtoReflect.Descriptor instead.
 func (*ResultField) Descriptor() ([]byte, []int) {
-	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{14}
+	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ResultField) GetName() string {
@@ -1290,7 +1485,7 @@ type Problem struct {
 
 func (x *Problem) Reset() {
 	*x = Problem{}
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[15]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1302,7 +1497,7 @@ func (x *Problem) String() string {
 func (*Problem) ProtoMessage() {}
 
 func (x *Problem) ProtoReflect() protoreflect.Message {
-	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[15]
+	mi := &file_wso2_cli_module_v1_contract_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1315,7 +1510,7 @@ func (x *Problem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Problem.ProtoReflect.Descriptor instead.
 func (*Problem) Descriptor() ([]byte, []int) {
-	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{15}
+	return file_wso2_cli_module_v1_contract_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Problem) GetCategory() string {
@@ -1350,7 +1545,7 @@ var File_wso2_cli_module_v1_contract_proto protoreflect.FileDescriptor
 
 const file_wso2_cli_module_v1_contract_proto_rawDesc = "" +
 	"\n" +
-	"!wso2/cli/module/v1/contract.proto\x12\x12wso2.cli.module.v1\"\xd3\x04\n" +
+	"!wso2/cli/module/v1/contract.proto\x12\x12wso2.cli.module.v1\"\xa9\x06\n" +
 	"\bEnvelope\x12#\n" +
 	"\rinvocation_id\x18\x01 \x01(\tR\finvocationId\x12%\n" +
 	"\x0ecorrelation_id\x18\x02 \x01(\tR\rcorrelationId\x121\n" +
@@ -1362,7 +1557,10 @@ const file_wso2_cli_module_v1_contract_proto_rawDesc = "" +
 	"\x0eaccess_granted\x18\x0e \x01(\v2!.wso2.cli.module.v1.AccessGrantedH\x00R\raccessGranted\x12G\n" +
 	"\raccess_denied\x18\x0f \x01(\v2 .wso2.cli.module.v1.AccessDeniedH\x00R\faccessDenied\x124\n" +
 	"\x06result\x18\x10 \x01(\v2\x1a.wso2.cli.module.v1.ResultH\x00R\x06result\x127\n" +
-	"\aproblem\x18\x11 \x01(\v2\x1b.wso2.cli.module.v1.ProblemH\x00R\aproblemB\t\n" +
+	"\aproblem\x18\x11 \x01(\v2\x1b.wso2.cli.module.v1.ProblemH\x00R\aproblem\x127\n" +
+	"\aconfirm\x18\x12 \x01(\v2\x1b.wso2.cli.module.v1.ConfirmH\x00R\aconfirm\x12=\n" +
+	"\tconfirmed\x18\x13 \x01(\v2\x1d.wso2.cli.module.v1.ConfirmedH\x00R\tconfirmed\x12\\\n" +
+	"\x14confirmation_refused\x18\x14 \x01(\v2'.wso2.cli.module.v1.ConfirmationRefusedH\x00R\x13confirmationRefusedB\t\n" +
 	"\amessage\"\xa5\x01\n" +
 	"\x05Hello\x12:\n" +
 	"\x06module\x18\x01 \x01(\v2\".wso2.cli.module.v1.ModuleIdentityR\x06module\x12+\n" +
@@ -1405,6 +1603,11 @@ const file_wso2_cli_module_v1_contract_proto_rawDesc = "" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12&\n" +
 	"\x0fexpires_at_unix\x18\x02 \x01(\x03R\rexpiresAtUnix\"E\n" +
 	"\fAccessDenied\x125\n" +
+	"\aproblem\x18\x01 \x01(\v2\x1b.wso2.cli.module.v1.ProblemR\aproblem\"%\n" +
+	"\aConfirm\x12\x1a\n" +
+	"\bquestion\x18\x01 \x01(\tR\bquestion\"\v\n" +
+	"\tConfirmed\"L\n" +
+	"\x13ConfirmationRefused\x125\n" +
 	"\aproblem\x18\x01 \x01(\v2\x1b.wso2.cli.module.v1.ProblemR\aproblem\"\xc8\x01\n" +
 	"\x06Result\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\tR\x06schema\x127\n" +
@@ -1444,25 +1647,28 @@ func file_wso2_cli_module_v1_contract_proto_rawDescGZIP() []byte {
 }
 
 var file_wso2_cli_module_v1_contract_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_wso2_cli_module_v1_contract_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_wso2_cli_module_v1_contract_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_wso2_cli_module_v1_contract_proto_goTypes = []any{
-	(OutputMode)(0),           // 0: wso2.cli.module.v1.OutputMode
-	(*Envelope)(nil),          // 1: wso2.cli.module.v1.Envelope
-	(*Hello)(nil),             // 2: wso2.cli.module.v1.Hello
-	(*ModuleIdentity)(nil),    // 3: wso2.cli.module.v1.ModuleIdentity
-	(*Welcome)(nil),           // 4: wso2.cli.module.v1.Welcome
-	(*ShellIdentity)(nil),     // 5: wso2.cli.module.v1.ShellIdentity
-	(*Invoke)(nil),            // 6: wso2.cli.module.v1.Invoke
-	(*InvocationPolicy)(nil),  // 7: wso2.cli.module.v1.InvocationPolicy
-	(*InvocationContext)(nil), // 8: wso2.cli.module.v1.InvocationContext
-	(*AcquireAccess)(nil),     // 9: wso2.cli.module.v1.AcquireAccess
-	(*AccessGranted)(nil),     // 10: wso2.cli.module.v1.AccessGranted
-	(*AccessDenied)(nil),      // 11: wso2.cli.module.v1.AccessDenied
-	(*Result)(nil),            // 12: wso2.cli.module.v1.Result
-	(*ResultColumn)(nil),      // 13: wso2.cli.module.v1.ResultColumn
-	(*ResultRow)(nil),         // 14: wso2.cli.module.v1.ResultRow
-	(*ResultField)(nil),       // 15: wso2.cli.module.v1.ResultField
-	(*Problem)(nil),           // 16: wso2.cli.module.v1.Problem
+	(OutputMode)(0),             // 0: wso2.cli.module.v1.OutputMode
+	(*Envelope)(nil),            // 1: wso2.cli.module.v1.Envelope
+	(*Hello)(nil),               // 2: wso2.cli.module.v1.Hello
+	(*ModuleIdentity)(nil),      // 3: wso2.cli.module.v1.ModuleIdentity
+	(*Welcome)(nil),             // 4: wso2.cli.module.v1.Welcome
+	(*ShellIdentity)(nil),       // 5: wso2.cli.module.v1.ShellIdentity
+	(*Invoke)(nil),              // 6: wso2.cli.module.v1.Invoke
+	(*InvocationPolicy)(nil),    // 7: wso2.cli.module.v1.InvocationPolicy
+	(*InvocationContext)(nil),   // 8: wso2.cli.module.v1.InvocationContext
+	(*AcquireAccess)(nil),       // 9: wso2.cli.module.v1.AcquireAccess
+	(*AccessGranted)(nil),       // 10: wso2.cli.module.v1.AccessGranted
+	(*AccessDenied)(nil),        // 11: wso2.cli.module.v1.AccessDenied
+	(*Confirm)(nil),             // 12: wso2.cli.module.v1.Confirm
+	(*Confirmed)(nil),           // 13: wso2.cli.module.v1.Confirmed
+	(*ConfirmationRefused)(nil), // 14: wso2.cli.module.v1.ConfirmationRefused
+	(*Result)(nil),              // 15: wso2.cli.module.v1.Result
+	(*ResultColumn)(nil),        // 16: wso2.cli.module.v1.ResultColumn
+	(*ResultRow)(nil),           // 17: wso2.cli.module.v1.ResultRow
+	(*ResultField)(nil),         // 18: wso2.cli.module.v1.ResultField
+	(*Problem)(nil),             // 19: wso2.cli.module.v1.Problem
 }
 var file_wso2_cli_module_v1_contract_proto_depIdxs = []int32{
 	2,  // 0: wso2.cli.module.v1.Envelope.hello:type_name -> wso2.cli.module.v1.Hello
@@ -1471,22 +1677,26 @@ var file_wso2_cli_module_v1_contract_proto_depIdxs = []int32{
 	9,  // 3: wso2.cli.module.v1.Envelope.acquire_access:type_name -> wso2.cli.module.v1.AcquireAccess
 	10, // 4: wso2.cli.module.v1.Envelope.access_granted:type_name -> wso2.cli.module.v1.AccessGranted
 	11, // 5: wso2.cli.module.v1.Envelope.access_denied:type_name -> wso2.cli.module.v1.AccessDenied
-	12, // 6: wso2.cli.module.v1.Envelope.result:type_name -> wso2.cli.module.v1.Result
-	16, // 7: wso2.cli.module.v1.Envelope.problem:type_name -> wso2.cli.module.v1.Problem
-	3,  // 8: wso2.cli.module.v1.Hello.module:type_name -> wso2.cli.module.v1.ModuleIdentity
-	5,  // 9: wso2.cli.module.v1.Welcome.shell:type_name -> wso2.cli.module.v1.ShellIdentity
-	0,  // 10: wso2.cli.module.v1.Invoke.output_mode:type_name -> wso2.cli.module.v1.OutputMode
-	7,  // 11: wso2.cli.module.v1.Invoke.policy:type_name -> wso2.cli.module.v1.InvocationPolicy
-	8,  // 12: wso2.cli.module.v1.Invoke.context:type_name -> wso2.cli.module.v1.InvocationContext
-	16, // 13: wso2.cli.module.v1.AccessDenied.problem:type_name -> wso2.cli.module.v1.Problem
-	15, // 14: wso2.cli.module.v1.Result.fields:type_name -> wso2.cli.module.v1.ResultField
-	13, // 15: wso2.cli.module.v1.Result.columns:type_name -> wso2.cli.module.v1.ResultColumn
-	14, // 16: wso2.cli.module.v1.Result.rows:type_name -> wso2.cli.module.v1.ResultRow
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	15, // 6: wso2.cli.module.v1.Envelope.result:type_name -> wso2.cli.module.v1.Result
+	19, // 7: wso2.cli.module.v1.Envelope.problem:type_name -> wso2.cli.module.v1.Problem
+	12, // 8: wso2.cli.module.v1.Envelope.confirm:type_name -> wso2.cli.module.v1.Confirm
+	13, // 9: wso2.cli.module.v1.Envelope.confirmed:type_name -> wso2.cli.module.v1.Confirmed
+	14, // 10: wso2.cli.module.v1.Envelope.confirmation_refused:type_name -> wso2.cli.module.v1.ConfirmationRefused
+	3,  // 11: wso2.cli.module.v1.Hello.module:type_name -> wso2.cli.module.v1.ModuleIdentity
+	5,  // 12: wso2.cli.module.v1.Welcome.shell:type_name -> wso2.cli.module.v1.ShellIdentity
+	0,  // 13: wso2.cli.module.v1.Invoke.output_mode:type_name -> wso2.cli.module.v1.OutputMode
+	7,  // 14: wso2.cli.module.v1.Invoke.policy:type_name -> wso2.cli.module.v1.InvocationPolicy
+	8,  // 15: wso2.cli.module.v1.Invoke.context:type_name -> wso2.cli.module.v1.InvocationContext
+	19, // 16: wso2.cli.module.v1.AccessDenied.problem:type_name -> wso2.cli.module.v1.Problem
+	19, // 17: wso2.cli.module.v1.ConfirmationRefused.problem:type_name -> wso2.cli.module.v1.Problem
+	18, // 18: wso2.cli.module.v1.Result.fields:type_name -> wso2.cli.module.v1.ResultField
+	16, // 19: wso2.cli.module.v1.Result.columns:type_name -> wso2.cli.module.v1.ResultColumn
+	17, // 20: wso2.cli.module.v1.Result.rows:type_name -> wso2.cli.module.v1.ResultRow
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_wso2_cli_module_v1_contract_proto_init() }
@@ -1503,6 +1713,9 @@ func file_wso2_cli_module_v1_contract_proto_init() {
 		(*Envelope_AccessDenied)(nil),
 		(*Envelope_Result)(nil),
 		(*Envelope_Problem)(nil),
+		(*Envelope_Confirm)(nil),
+		(*Envelope_Confirmed)(nil),
+		(*Envelope_ConfirmationRefused)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1510,7 +1723,7 @@ func file_wso2_cli_module_v1_contract_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wso2_cli_module_v1_contract_proto_rawDesc), len(file_wso2_cli_module_v1_contract_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

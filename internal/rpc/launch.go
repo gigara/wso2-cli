@@ -44,6 +44,9 @@ type Launcher struct {
 	// Broker answers the module's access requests. A launcher without one
 	// denies access rather than granting it.
 	Broker Broker
+	// Confirmer answers the module's confirmation requests. A launcher
+	// without one refuses them rather than confirming.
+	Confirmer Confirmer
 	// DiagnosticLimit bounds captured standard error. Zero means
 	// DefaultDiagnosticLimit.
 	DiagnosticLimit int
@@ -103,6 +106,7 @@ func (l Launcher) Invoke(ctx context.Context, invocation Invocation) (Outcome, e
 		Shell:        l.Shell,
 		InvocationID: invocationID,
 		Broker:       l.Broker,
+		Confirmer:    l.Confirmer,
 		holdDeadline: deadline.hold,
 	}
 	outcome, sessionErr := l.runSession(ctx, command, toModule, fromModule, session, invocation, deadline)

@@ -114,11 +114,15 @@ func TestEveryMessageKindIsNamedForDiagnostics(t *testing.T) {
 	// every kind the contract defines needs a name, including the one a future
 	// release adds.
 	kinds := map[string]*contractv1.Envelope{
-		"a handshake":   {Message: &contractv1.Envelope_Hello{Hello: &contractv1.Hello{}}},
-		"a welcome":     {Message: &contractv1.Envelope_Welcome{Welcome: &contractv1.Welcome{}}},
-		"an invocation": {Message: &contractv1.Envelope_Invoke{Invoke: &contractv1.Invoke{}}},
-		"a result":      {Message: &contractv1.Envelope_Result{Result: &contractv1.Result{}}},
-		"a problem":     {Message: &contractv1.Envelope_Problem{Problem: &contractv1.Problem{}}},
+		"a handshake":            {Message: &contractv1.Envelope_Hello{Hello: &contractv1.Hello{}}},
+		"a welcome":              {Message: &contractv1.Envelope_Welcome{Welcome: &contractv1.Welcome{}}},
+		"an invocation":          {Message: &contractv1.Envelope_Invoke{Invoke: &contractv1.Invoke{}}},
+		"a result":               {Message: &contractv1.Envelope_Result{Result: &contractv1.Result{}}},
+		"a problem":              {Message: &contractv1.Envelope_Problem{Problem: &contractv1.Problem{}}},
+		"a confirmation request": {Message: &contractv1.Envelope_Confirm{Confirm: &contractv1.Confirm{}}},
+		"a confirmation":         {Message: &contractv1.Envelope_Confirmed{Confirmed: &contractv1.Confirmed{}}},
+		"a confirmation refusal": {Message: &contractv1.Envelope_ConfirmationRefused{
+			ConfirmationRefused: &contractv1.ConfirmationRefused{}}},
 		"a message this release does not recognize": {},
 	}
 	for want, envelope := range kinds {

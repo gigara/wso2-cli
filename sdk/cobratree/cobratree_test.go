@@ -234,3 +234,53 @@ func TestACommandWithNoHandlerIsNotServed(t *testing.T) {
 		t.Fatalf("an unhandled command was served: %+v", commands)
 	}
 }
+
+// TestARequiredFlagLeftOutIsRefusedWithTheExampleToRun proves a flag the tree
+// marks required is enforced before the handler runs, as a usage problem whose
+// recovery is the command's own example: the mark help shows is a promise the
+// command keeps, and the refusal hands over the line to paste.
+func TestARequiredFlagLeftOutIsRefusedWithTheExampleToRun(t *testing.T) {
+	root := &cobra.Command{Use: "reference"}
+	create := &cobra.Command{Use: "create", Example: "  wso2 reference create -f <file> --project <id>"}
+	create.Flags().StringP("file", "f", "", "The file.")
+	create.Flags().String("project", "", "The project.")
+	for _, name := range []string{"file", "project"} {
+		if err := create.MarkFlagRequired(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root.AddCommand(create)
+	ran := false
+	tree := cobratree.New(root).Handle(create, func(context.Context, module.Request) (result.Result, error) {
+		ran = true
+		return result.New("reference.test/v1").With("ran", "", "create"), nil
+	})
+
+	outcome := testkit.Run(context.Background(), options(), tree.Commands(),
+		testkit.Invocation{Command: []string{"create"}, Arguments: []string{"-f", "api.yaml"}})
+
+	if outcome.Err != nil {
+		t.Fatalf("the exchange failed: %v", outcome.Err)
+	}
+	if ran {
+		t.Fatal("the handler ran without a required flag")
+	}
+	if outcome.Problem == nil {
+		t.Fatalf("no problem was reported: %+v", outcome.Result)
+	}
+	if outcome.Problem.Code != "module.flag_required" {
+		t.Errorf("code = %q, want module.flag_required", outcome.Problem.Code)
+	}
+	if !strings.Contains(outcome.Problem.Message, "--project") || strings.Contains(outcome.Problem.Message, "--file") {
+		t.Errorf("message = %q, want it to name --project alone", outcome.Problem.Message)
+	}
+	if outcome.Problem.Recovery != "Run wso2 reference create -f <file> --project <id>." {
+		t.Errorf("recovery = %q, want the example to run", outcome.Problem.Recovery)
+	}
+
+	outcome = testkit.Run(context.Background(), options(), tree.Commands(),
+		testkit.Invocation{Command: []string{"create"}, Arguments: []string{"-f", "api.yaml", "--project", "p1"}})
+	if outcome.Err != nil || outcome.Problem != nil || !ran {
+		t.Fatalf("the handler did not run once both flags were given: %+v %+v", outcome.Problem, outcome.Err)
+	}
+}

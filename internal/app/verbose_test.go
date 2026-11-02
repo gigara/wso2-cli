@@ -529,7 +529,7 @@ func TestVerboseIsNotForwardedToAModule(t *testing.T) {
 	if err := protocol.NewWriter(&handshake).WriteEnvelope(&contractv1.Envelope{
 		Message: &contractv1.Envelope_Hello{Hello: &contractv1.Hello{
 			Module:           &contractv1.ModuleIdentity{Namespace: "reference", Version: "0.1.0"},
-			ProtocolVersions: []uint32{1},
+			ProtocolVersions: []uint32{uint32(fixture.OldestProtocol())},
 		}},
 	}); err != nil {
 		t.Fatalf("encoding the fixture handshake: %v", err)

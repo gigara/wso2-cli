@@ -36,7 +36,14 @@ import (
 // source. Override it with:
 //
 //	-ldflags "-X github.com/wso2/wso2-cli/sdk/protocol.Version=1"
-var Version = "2"
+var Version = "3"
+
+// ConfirmationVersion is the first protocol version that carries a
+// confirmation request (Confirm, Confirmed, ConfirmationRefused). A shell
+// that negotiated an older version with a module refuses the request rather
+// than answering a message that version does not define. See
+// docs/adr/0021-a-shell-drawn-confirmation-in-the-module-contract.md.
+const ConfirmationVersion = 3
 
 // Supported reports the protocol versions a module built against this SDK
 // release speaks, newest first.

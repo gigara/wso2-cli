@@ -43,7 +43,8 @@ The `example` module is a local demonstration module. Public catalog input
 excludes its declaration and tags, along with historical demonstration-module
 tags. Install it from the checkout using the
 [local setup guide](../guides/setup-example-module.md), rather than
-`ws product install`. The catalog examples below use the `apim` product.
+`ws product install`. The catalog examples below use the `apim` product,
+whose module is developed on the `preview/product-modules` branch.
 
 A module declares the namespace it owns in a `module.json` beside its
 `go.mod`:
@@ -55,7 +56,7 @@ A module declares the namespace it owns in a `module.json` beside its
   "title": "API Platform",
   "compatibility": {
     "shell": ">=0.1.0 <2.0.0",
-    "protocolVersions": [2]
+    "protocolVersions": [3]
   },
   "capabilities": {
     "authAudiences": ["api-management"],

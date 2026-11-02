@@ -63,6 +63,9 @@ message Envelope {
     AccessDenied access_denied = 15;
     Result result = 16;
     Problem problem = 17;
+    Confirm confirm = 18;
+    Confirmed confirmed = 19;
+    ConfirmationRefused confirmation_refused = 20;
   }
 }
 
@@ -241,6 +244,39 @@ message AccessGranted {
 // policy, so it also owns the failure class, the stable code, and the recovery
 // guidance a user acts on.
 message AccessDenied {
+  Problem problem = 1;
+}
+
+// Confirm asks the shell to put a yes/no question to the person running the
+// command before the module acts on something that cannot be undone.
+//
+// The module states the question, because it alone knows what it is about to
+// delete; the shell decides whether anything may be asked and how the question
+// is drawn, exactly as for its own destructive commands. A module whose command
+// line carried --yes sends no Confirm at all. Carried since protocol version 3.
+//
+// The envelope's invocation_id binds the request to this invocation and its
+// correlation_id pairs it with the answer.
+message Confirm {
+  // question is the complete question to put to the person, such as "Delete
+  // the API abc and every deployment of it? This cannot be undone." The shell
+  // draws it verbatim on standard error with its own yes/no hint.
+  string question = 1;
+}
+
+// Confirmed answers Confirm when the person answered yes. It carries nothing:
+// the answer is the message.
+message Confirmed {}
+
+// ConfirmationRefused answers Confirm in every other case: the person answered
+// no or cancelled, or nothing could be asked because --no-input, WSO2_NO_INPUT
+// or a standard input that is not a terminal forbade it.
+//
+// The problem is the shell's, not the module's: the shell owns prompting
+// policy, so it also owns the failure class, the stable code, and the recovery
+// guidance, which names --yes when a prompt was forbidden, exactly as for the
+// shell's own destructive commands. A module returns it unchanged.
+message ConfirmationRefused {
   Problem problem = 1;
 }
 
