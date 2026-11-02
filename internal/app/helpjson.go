@@ -44,12 +44,17 @@ type helpDocument struct {
 	// Commands are the shell's own commands, every level flattened, each
 	// with its path after the name.
 	Commands []helpCommand `json:"commands,omitempty"`
-	// Flags are the shell flags accepted on every command line.
+	// Flags are the shell flags every shell command accepts, the persistent
+	// ones. A flag a shell command declares for itself, such as --output on
+	// a listing, is in that command's own flags.
 	Flags []helpFlag `json:"flags,omitempty"`
 	// Products are the product namespaces: every one this release knows a
 	// stable version of, marked installed or not, and every installed one
 	// with its declared tree.
 	Products []helpProductDocument `json:"products,omitempty"`
+	// Warnings say what the document could not read and so does not show,
+	// in the words the table form uses. Absent when it is complete.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // helpProductDocument is one product namespace in the document.
@@ -63,6 +68,12 @@ type helpProductDocument struct {
 	// namespace. Absent for a product that is not installed, whose tree this
 	// shell does not hold (ADR 0013), and for one that declares none.
 	Commands []helpCommand `json:"commands,omitempty"`
+	// Flags are the shell's flags accepted on every product command line,
+	// which the shell reads wherever they appear and never forwards. They
+	// are listed with the product, as the product page lists them, because
+	// a reader who finds them beside the module's would look for them in
+	// the module's documentation.
+	Flags []helpFlag `json:"flags,omitempty"`
 }
 
 // helpCommand is one command, shell or product.
@@ -115,12 +126,16 @@ func (s Shell) shellHelpDocument(root *cobra.Command) helpDocument {
 	for _, command := range listedCommands(root) {
 		document.Commands = append(document.Commands, shellCommandSubtree(command, name)...)
 	}
-	products, _ := s.helpProducts()
+	products, inventoryRead := s.helpProducts()
+	if !inventoryRead {
+		document.Warnings = append(document.Warnings, inventoryUnreadWarning)
+	}
 	trees := s.installedTrees()
 	for _, product := range products {
 		entry := helpProductDocument{Namespace: product.namespace, Description: product.summary, Installed: product.installed}
 		if tree, declared := trees[product.namespace]; declared {
 			entry.Commands = productCommandSubtree(product.namespace, tree, tree.Route(nil).Command, name)
+			entry.Flags = productShellFlags()
 		}
 		document.Products = append(document.Products, entry)
 	}
@@ -138,7 +153,8 @@ func (s Shell) shellCommandHelpDocument(command *cobra.Command) helpDocument {
 func (s Shell) productHelpDocument(namespace string, declared parsetree.Tree, found commandtree.Command) helpDocument {
 	name := output.NameOf(s.Streams.Out)
 	entry := helpProductDocument{Namespace: namespace, Installed: true,
-		Commands: productCommandSubtree(namespace, declared, found, name)}
+		Commands: productCommandSubtree(namespace, declared, found, name),
+		Flags:    productShellFlags()}
 	products, _ := s.helpProducts()
 	for _, product := range products {
 		if product.namespace == namespace {
@@ -255,16 +271,31 @@ func shellCommandPath(command *cobra.Command) []string {
 	return reversed
 }
 
-// shellFlagsOf reports the shell flags the root accepts on every command line:
-// its own, which already include the persistent ones.
+// shellFlagsOf reports the shell flags every shell command accepts: the
+// root's persistent ones. Its local ones, --context and --output, are taken
+// only by the shell commands that declare them, and those commands list them;
+// a document that said otherwise would send a reader into shell.unsupported_flag.
 func shellFlagsOf(root *cobra.Command, name string) []helpFlag {
 	var flags []helpFlag
-	root.Flags().VisitAll(func(flag *pflag.Flag) {
+	root.PersistentFlags().VisitAll(func(flag *pflag.Flag) {
 		if !flag.Hidden {
 			flags = append(flags, describeShellFlag(flag, name))
 		}
 	})
 	return flags
+}
+
+// productShellFlags reports the shell flags accepted on every product command
+// line, the three the product page prints in the same words. The shell reads
+// them wherever they appear on the line and never forwards them, so they are
+// not in any module's declared tree; --no-input is taken off the line before
+// Cobra sees it and is declared nowhere at all.
+func productShellFlags() []helpFlag {
+	return []helpFlag{
+		{Name: contextFlag, Type: "string", Description: "Use the named context instead of the selected one."},
+		{Name: noInputFlag, Type: "bool", Description: "Refuse rather than prompt, open a browser, or wait for a person."},
+		{Name: outputFlag, Shorthand: "o", Type: "string", Default: string(output.ModeTable), Description: "Render results as table or json."},
+	}
 }
 
 // describeShellFlag describes one of the shell's own flags the way a product flag is

@@ -18,7 +18,7 @@ package cobratree
 
 import (
 	"context"
-	"strings"
+	"encoding/json"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -146,7 +146,9 @@ const ResultFieldsAnnotation = "wso2.resultFields"
 // ResultFields declares the JSON members a command's result carries, in order,
 // so that the shell's machine-readable help can say what the command answers.
 // It records them as an annotation on the command, which is the one place
-// Cobra keeps data beside a command, and Declare reads them from there.
+// Cobra keeps data beside a command, and Declare reads them from there. The
+// annotation is a JSON array, so a name is read back exactly as it was given,
+// whatever characters it holds.
 //
 // It describes, and never enforces: the result the handler returns is what is
 // rendered, whatever was declared here.
@@ -154,7 +156,13 @@ func ResultFields(command *cobra.Command, names ...string) {
 	if command.Annotations == nil {
 		command.Annotations = map[string]string{}
 	}
-	command.Annotations[ResultFieldsAnnotation] = strings.Join(names, ",")
+	encoded, err := json.Marshal(names)
+	if err != nil {
+		// A []string always marshals; this is unreachable, and declaring
+		// nothing is the honest answer if it ever were reached.
+		return
+	}
+	command.Annotations[ResultFieldsAnnotation] = string(encoded)
 }
 
 // declaredResultFields reads back what ResultFields recorded.
@@ -163,7 +171,11 @@ func declaredResultFields(command *cobra.Command) []string {
 	if !declared || recorded == "" {
 		return nil
 	}
-	return strings.Split(recorded, ",")
+	var names []string
+	if err := json.Unmarshal([]byte(recorded), &names); err != nil || len(names) == 0 {
+		return nil
+	}
+	return names
 }
 
 // requiredFlag reports whether the module marked a flag required with

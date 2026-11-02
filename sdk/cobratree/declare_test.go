@@ -304,6 +304,9 @@ func TestDeclareCarriesAFlagsDefaultAndTheResultFieldsACommandDeclares(t *testin
 	list.Flags().StringArray("tag", nil, "A tag.")
 	cobratree.ResultFields(list, "count", "rows", "next")
 	root.AddCommand(list)
+	odd := &cobra.Command{Use: "odd"}
+	cobratree.ResultFields(odd, "a,b", `say "so"`)
+	root.AddCommand(odd)
 
 	declared := cobratree.New(root).Handle(list, noop).Declare()
 
@@ -326,5 +329,11 @@ func TestDeclareCarriesAFlagsDefaultAndTheResultFieldsACommandDeclares(t *testin
 	plain, _ := findDeclared(declared)
 	if plain.ResultFields != nil {
 		t.Errorf("a command that declared no result fields reports %v", plain.ResultFields)
+	}
+	// A name is read back as it was given, so a comma or a quote in one does
+	// not split or mangle it.
+	if leaf, _ := findDeclared(declared, "odd"); len(leaf.ResultFields) != 2 ||
+		leaf.ResultFields[0] != "a,b" || leaf.ResultFields[1] != `say "so"` {
+		t.Errorf("ResultFields with a comma and a quote = %q, want them intact", leaf.ResultFields)
 	}
 }

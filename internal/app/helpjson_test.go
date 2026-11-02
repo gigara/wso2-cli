@@ -17,12 +17,16 @@
 package app_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/wso2/wso2-cli/internal/app"
 	"github.com/wso2/wso2-cli/internal/exit"
 	"github.com/wso2/wso2-cli/internal/modules/fixture"
+	"github.com/wso2/wso2-cli/internal/output"
+	"github.com/wso2/wso2-cli/internal/state"
 	"github.com/wso2/wso2-cli/sdk/commandtree"
 )
 
@@ -37,7 +41,17 @@ type helpJSON struct {
 		Description string            `json:"description"`
 		Installed   bool              `json:"installed"`
 		Commands    []helpJSONCommand `json:"commands"`
+		Flags       []helpJSONFlag    `json:"flags"`
 	} `json:"products"`
+	Warnings []string `json:"warnings"`
+}
+
+func flagNames(flags []helpJSONFlag) string {
+	var names []string
+	for _, flag := range flags {
+		names = append(names, flag.Name)
+	}
+	return strings.Join(names, ",")
 }
 
 type helpJSONCommand struct {
@@ -103,24 +117,34 @@ func TestHelpJSONRendersTheWholeTreeInOneDocument(t *testing.T) {
 	if _, ok := findPath(document.Commands, "help"); !ok {
 		t.Errorf("help itself is not listed")
 	}
-	var shellFlags []string
-	for _, flag := range document.Flags {
-		shellFlags = append(shellFlags, flag.Name)
+	// The document's own flags are the ones every shell command takes; the
+	// root's --context and --output are not, and a shell command that takes
+	// them lists them itself.
+	if got := flagNames(document.Flags); got != "help,verbose" {
+		t.Errorf("shell flags = %q, want help,verbose", got)
 	}
-	if strings.Join(shellFlags, ",") != "context,help,output,verbose" {
-		t.Errorf("shell flags = %v, want context, help, output and verbose once each", shellFlags)
+	if list, ok := findPath(document.Commands, "context", "list"); !ok || !strings.Contains(flagNames(list.Flags), "output") {
+		t.Errorf("context list does not list the --output it declares: %+v", list)
+	}
+	if len(document.Warnings) != 0 {
+		t.Errorf("a complete document carries warnings: %v", document.Warnings)
 	}
 	products := map[string]bool{}
 	for _, product := range document.Products {
 		products[product.Namespace] = product.Installed
 		switch product.Namespace {
 		case "api":
-			if product.Installed || len(product.Commands) != 0 || product.Description != "API Platform" {
+			if product.Installed || len(product.Commands) != 0 || len(product.Flags) != 0 || product.Description != "API Platform" {
 				t.Errorf("a published, uninstalled product is described as %+v", product)
 			}
 		case "widget":
 			if !product.Installed || product.Description != "Work with the widget product." {
 				t.Errorf("the installed product is described as %+v", product)
+			}
+			// The shell flags a product command line takes travel with the
+			// product, as the product page prints them.
+			if got := flagNames(product.Flags); got != "context,no-input,output" {
+				t.Errorf("the product's shell flags = %q, want context,no-input,output", got)
 			}
 			if root, ok := findPath(product.Commands, "widget"); !ok || root.Runnable ||
 				strings.Join(root.Commands, ",") != "api,project,status" {
@@ -136,6 +160,28 @@ func TestHelpJSONRendersTheWholeTreeInOneDocument(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "\\u003c") {
 		t.Errorf("placeholders were HTML-escaped:\n%s", out)
+	}
+}
+
+// TestHelpJSONSaysWhenItCannotTellWhatIsInstalled is the JSON form of
+// TestHelpSaysWhenItCannotTellWhatIsInstalled: an unreadable store leaves
+// every released product unmarked, and the document says so in a warning
+// instead of passing as complete.
+func TestHelpJSONSaysWhenItCannotTellWhatIsInstalled(t *testing.T) {
+	t.Setenv(state.RootEnvVar, "relative/not-absolute")
+	out, errOut := &bytes.Buffer{}, &bytes.Buffer{}
+	shell := app.Shell{Streams: output.Streams{Out: out, Err: errOut}}
+	releasedWith(&shell, stable("api", "API Platform"))
+
+	if code := shell.Run([]string{"help", "--output", "json"}); code != exit.OK {
+		t.Fatalf("exit code = %d, want %d; stderr: %s", code, exit.OK, errOut)
+	}
+	document := decodeHelp(t, out.String())
+	if len(document.Products) != 1 || document.Products[0].Installed {
+		t.Errorf("products = %+v, want api, unmarked", document.Products)
+	}
+	if strings.Join(document.Warnings, ";") != "The installed products could not be read, so none is marked." {
+		t.Errorf("warnings = %q, want the one the table form prints", document.Warnings)
 	}
 }
 
