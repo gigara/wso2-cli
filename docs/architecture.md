@@ -137,6 +137,9 @@ mapping. See the [module SDK reference](reference/module-sdk.md).
 The shell owns authentication and every long-lived credential. A module asks
 for access over its own standard input and output (`AcquireAccess`), and the
 shell answers with `AccessGranted` or `AccessDenied`. There is no local port.
+A module confirms a destructive action the same way: it sends `Confirm` with
+its question, and the shell asks it, or refuses to, and answers `Confirmed` or
+`ConfirmationRefused` ([ADR 0021](adr/0021-a-shell-drawn-confirmation-in-the-module-contract.md)).
 
 The broker:
 
@@ -261,7 +264,8 @@ contract.
 5. `Hello` / `Welcome` complete the handshake.
 6. The shell sends one `Invoke` with the command path, arguments, output
    mode, and policy.
-7. The module may send `AcquireAccess` any number of times.
+7. The module may send `AcquireAccess`, and from protocol version 3
+   `Confirm`, any number of times, each bounded by the shell.
 8. The module ends with one `Result` or `Problem`, and the shell renders it
    and exits with the mapped code.
 
@@ -280,6 +284,11 @@ separate the three:
 The `example` module stays in `modules/example/` for local setup and contract
 tests. Its declaration and tags are excluded from the public catalog and
 release workflow. See [local setup](guides/setup-example-module.md).
+
+The `apim` and `iam` product modules are developed on the
+`preview/product-modules` branch, which carries `main` plus `modules/apim/`
+and `modules/iam/`. `main` holds the shell, the SDK, and the example module,
+and the product branch merges `main` to pick up shell and SDK changes.
 
 A product module tag push runs the release gate, builds one archive per platform,
 publishes them to GitHub Releases, regenerates the catalog from every module
@@ -457,7 +466,7 @@ Reintroducing it is not defensive tightening.
 ```text
 $ ws version
 WSO2 CLI   v0.1.0
-Protocol   v2, v1
+Protocol   v3, v2
 Platform   darwin/arm64
 
 Installed modules
@@ -486,8 +495,6 @@ column, because there is no publisher or revocation state to report.
 │                           contexts, devorigin, install, modules, output,
 │                           parsetree, rpc, state, wizard, and others
 ├── modules/
-│   ├── apim/
-│   ├── iam/
 │   └── example/          proves the contract; not a product
 ├── sdk/                    public Go module: module, cobratree,
 │                           commandtree, problem, result, proto, protocol,

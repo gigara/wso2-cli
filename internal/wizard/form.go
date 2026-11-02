@@ -25,7 +25,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/term"
+	"golang.org/x/term"
 )
 
 // formPrompter asks with a huh form drawn on a terminal, in theme.
@@ -145,7 +145,7 @@ func Drawable(out io.Writer) bool {
 	if !ok {
 		return false
 	}
-	width, height, err := term.GetSize(file.Fd())
+	width, height, err := term.GetSize(int(file.Fd()))
 	return err == nil && width > 0 && height > 0
 }
 
@@ -159,7 +159,7 @@ func dumbTerminal() bool {
 // fails to draw.
 func (p formPrompter) width() int {
 	if file, ok := p.out.(interface{ Fd() uintptr }); ok {
-		if width, _, err := term.GetSize(file.Fd()); err == nil && width > 0 {
+		if width, _, err := term.GetSize(int(file.Fd())); err == nil && width > 0 {
 			return width
 		}
 	}

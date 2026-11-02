@@ -1,9 +1,9 @@
-go 1.26.9
+go 1.26.10
 
 // The workspace composes the SDK and the product modules from source during
 // local development, so a change to the SDK is testable before it is tagged.
 //
-// It declares no replacements. sdk/v0.3.0 is published, so every module
+// It declares no replacements. sdk/v0.4.0 is published, so every module
 // requires a version the module proxy can serve and nothing here has to stand
 // in for it.
 //
@@ -23,7 +23,5 @@ go 1.26.9
 use (
 	.
 	./modules/example
-	./modules/apim
-	./modules/iam
 	./sdk
 )

@@ -33,7 +33,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache-dependency-path: |
             go.mod
             sdk/go.mod
@@ -69,7 +69,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache-dependency-path: |
             go.mod
             sdk/go.mod
@@ -82,9 +82,10 @@ jobs:
       # origin is catalog.DefaultOrigin, which a catalog test holds this URL to.
       #
       # The copy is proven to read back before anything is published: a shell
-      # built with it here must list every product it names. An unreachable,
-      # unreadable or empty index fails the release rather than shipping a help
-      # page that names nothing.
+      # built with it here must list every product it names. An unreachable or
+      # unreadable index fails the release rather than shipping a help page that
+      # names nothing. An index naming no stable product is legitimate before
+      # any product is released, and the help page then lists none.
       - name: Fetch and check the published catalog index
         shell: bash
         run: |
@@ -98,7 +99,7 @@ jobs:
           echo "WSO2_RELEASED_CATALOG=${encoded}" >>"${GITHUB_ENV}"
 
       - name: Build and publish the release
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           # Pinned in step with the Makefile's own pin, so a contributor running
           # `make release-snapshot` builds with the version that publishes.

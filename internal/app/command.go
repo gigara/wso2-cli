@@ -210,8 +210,12 @@ func (s Shell) rootCommand() *cobra.Command {
 		if command.Name() == "help" {
 			command.Short = "Show the shell command tree."
 			command.Run = nil
+			// --output json renders the tree a topic covers as one JSON
+			// document, which is how an agent reads the whole of help in
+			// one go instead of walking it page by page.
+			declareOutputFlag(command.Flags())
 			command.RunE = func(command *cobra.Command, args []string) error {
-				return s.helpTopic(command.Root(), args)
+				return s.helpTopic(command, args)
 			}
 		}
 	}
