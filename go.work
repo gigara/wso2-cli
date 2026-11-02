@@ -23,7 +23,5 @@ go 1.26.10
 use (
 	.
 	./modules/example
-	./modules/apim
-	./modules/iam
 	./sdk
 )

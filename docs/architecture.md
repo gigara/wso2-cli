@@ -285,6 +285,11 @@ The `example` module stays in `modules/example/` for local setup and contract
 tests. Its declaration and tags are excluded from the public catalog and
 release workflow. See [local setup](guides/setup-example-module.md).
 
+The `apim` and `iam` product modules are developed on the
+`preview/product-modules` branch, which carries `main` plus `modules/apim/`
+and `modules/iam/`. `main` holds the shell, the SDK, and the example module,
+and the product branch merges `main` to pick up shell and SDK changes.
+
 A product module tag push runs the release gate, builds one archive per platform,
 publishes them to GitHub Releases, regenerates the catalog from every module
 tag, and deploys it. Generation is deterministic. A release is refused when
@@ -490,8 +495,6 @@ column, because there is no publisher or revocation state to report.
 │                           contexts, devorigin, install, modules, output,
 │                           parsetree, rpc, state, wizard, and others
 ├── modules/
-│   ├── apim/
-│   ├── iam/
 │   └── example/          proves the contract; not a product
 ├── sdk/                    public Go module: module, cobratree,
 │                           commandtree, problem, result, proto, protocol,
