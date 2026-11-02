@@ -63,7 +63,7 @@ Commands are Cobra commands, built in `commands()` and bound to handlers:
 ```go
 func commands() *cobratree.Tree {
 	root := &cobra.Command{Use: Namespace, Short: "ABC commands for the WSO2 CLI.",
-		Example: "  wso2 abc list"}
+		Example: "  wso2 abc list --project <id>"}
 	listCommand := &cobra.Command{Use: "list", Short: "List the things.",
 		Example: "  wso2 abc list --project <id>"}
 	listCommand.Flags().String("project", "", "The project; wso2 abc project list shows the ids.")
