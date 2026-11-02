@@ -56,10 +56,10 @@ These are naming examples, not commands currently supplied by an `am` module.
 
 ## The rules
 
-Ten rules, each with an example that follows it and one that does not. ADR
-0015 (one word per concept in the command surface) is the decision behind
-most of them, and the domain glossary in [`CONTEXT.md`](../../CONTEXT.md)
-supplies the project's terms.
+Ten rules, each with examples of what to do and, where a wrong turn is
+common, what not to do. ADR 0015 (one word per concept in the command
+surface) is the decision behind most of them, and the domain glossary in
+[`CONTEXT.md`](../../CONTEXT.md) supplies the project's terms.
 
 ### 1. Namespace, resource, action, in that order
 
