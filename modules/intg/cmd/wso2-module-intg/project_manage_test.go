@@ -228,21 +228,6 @@ func TestProjectCreateMapsItsOwnRefusals(t *testing.T) {
 
 // --- project delete -------------------------------------------------------
 
-func TestProjectDeleteWithoutYesCallsNothing(t *testing.T) {
-	stub := newPlatformStub(t, nil)
-
-	outcome := run([]string{"project", "delete"}, []string{"orders"}, stub.endpoint(), &testkit.Access{Token: "t"})
-
-	assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)
-	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg project delete orders --yes") {
-		t.Errorf("recovery = %q, want it to name the confirmed command", outcome.Problem.Recovery)
-	}
-	if stub.calls != 0 || len(outcome.AccessRequests) != 0 {
-		t.Errorf("an unconfirmed delete reached the API (%d calls, %d access requests)",
-			stub.calls, len(outcome.AccessRequests))
-	}
-}
-
 func TestProjectDeleteReportsThatDeletionContinues(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{"DELETE /projects/orders": {status: http.StatusNoContent, body: ``}})
 

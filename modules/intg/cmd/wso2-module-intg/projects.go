@@ -319,25 +319,38 @@ func projectCreateFailed(err error, name, endpoint string) error {
 	return callFailed(err, "create the project "+name, endpoint)
 }
 
-// removalFlags carry the confirmation every delete needs.
+// removalFlags carry the --yes every delete takes.
 type removalFlags struct {
 	yes bool
 }
 
-// projectDelete answers "wso2 intg project delete <project> --yes".
-//
-// A module cannot prompt, so the command line is where a deletion is
-// confirmed: without --yes nothing is called.
+func (f *removalFlags) bind(command *cobra.Command) {
+	command.Flags().BoolVar(&f.yes, "yes", false, "Delete without asking first.")
+}
+
+// confirmRemoval asks the person running the command before something is
+// deleted, unless --yes answered in advance. The shell draws the question,
+// and refuses it under --no-input with a recovery naming --yes; that refusal
+// is returned unchanged.
+func confirmRemoval(ctx context.Context, request module.Request, flags *removalFlags, question string) error {
+	if flags.yes {
+		return nil
+	}
+	return request.Prompt.Confirm(ctx, module.ConfirmRequest{Question: question})
+}
+
+// projectDelete answers "wso2 intg project delete <project>", asking first
+// unless --yes is given. Nothing is called until the deletion is confirmed.
 func projectDelete(command *cobra.Command, flags *removalFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
 		name, err := exactlyOneArgument(command.Flags().Args(), "name the project to delete",
-			"Run wso2 intg project delete <project> --yes.")
+			"Run wso2 intg project delete <project>.")
 		if err != nil {
 			return result.Result{}, err
 		}
-		if !flags.yes {
-			return result.Result{}, usageProblem("deleting the project "+name+" also deletes everything in it, "+
-				"and is not confirmed", "Run wso2 intg project delete "+name+" --yes to delete it.")
+		if err := confirmRemoval(ctx, request, flags, "Delete the project "+name+
+			" and every integration in it? This cannot be undone."); err != nil {
+			return result.Result{}, err
 		}
 		client, err := clientFor(ctx, request)
 		if err != nil {

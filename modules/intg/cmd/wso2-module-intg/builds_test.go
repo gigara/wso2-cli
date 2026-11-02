@@ -48,7 +48,7 @@ func TestBuildRunBuildsTheBranchHeadWhenNoCommitIsGiven(t *testing.T) {
 		"POST /components/order-api/builds": {status: http.StatusCreated, body: `{"message":"build triggered","success":true}`},
 	})
 
-	outcome := run([]string{"build", "run"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "build", "run"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
 		t.Fatalf("build run failed: %v %v", outcome.Err, outcome.Problem)
@@ -59,12 +59,12 @@ func TestBuildRunBuildsTheBranchHeadWhenNoCommitIsGiven(t *testing.T) {
 	if sent := decodeBody(t, stub.body); len(sent) != 0 {
 		t.Errorf("sent %v, want an empty body, which builds the branch head", sent)
 	}
-	if outcome.Result.Schema != BuildStartSchema || field(outcome, "component") != "order-api" ||
+	if outcome.Result.Schema != BuildStartSchema || field(outcome, "integration") != "order-api" ||
 		field(outcome, "commit") != "branch head" {
 		t.Errorf("result = %+v", outcome.Result.Fields)
 	}
-	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg build list order-api") {
-		t.Errorf("next = %q, want it to name wso2 intg build list order-api", next)
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration build list order-api") {
+		t.Errorf("next = %q, want it to name wso2 intg integration build list order-api", next)
 	}
 }
 
@@ -73,7 +73,7 @@ func TestBuildRunPinsAFullCommit(t *testing.T) {
 		"POST /components/order-api/builds": {status: http.StatusCreated, body: `{"message":"build triggered","success":true}`},
 	})
 
-	outcome := run([]string{"build", "run"}, []string{"order-api", "--commit", strings.ToUpper(fullCommit)},
+	outcome := run([]string{"integration", "build", "run"}, []string{"order-api", "--commit", strings.ToUpper(fullCommit)},
 		stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
@@ -92,7 +92,7 @@ func TestBuildRunPinsAFullCommit(t *testing.T) {
 func TestBuildRunRefusesAShortCommit(t *testing.T) {
 	stub := newPlatformStub(t, nil)
 
-	outcome := run([]string{"build", "run"}, []string{"order-api", "--commit", "0123456"}, stub.endpoint(),
+	outcome := run([]string{"integration", "build", "run"}, []string{"order-api", "--commit", "0123456"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)
@@ -109,17 +109,17 @@ func TestBuildRunMapsItsRefusals(t *testing.T) {
 		code     string
 		recovery string
 	}{
-		{"unknown component", http.StatusNotFound, `{"error":"Not Found","message":"component not found"}`,
-			"intg.not_found", "wso2 intg component list"},
+		{"unknown integration", http.StatusNotFound, `{"error":"Not Found","message":"integration not found"}`,
+			"intg.not_found", "wso2 intg integration list"},
 		{"git integration down", http.StatusBadGateway,
 			`{"error":"Bad Gateway","message":"git integration unavailable; retry the build"}`,
-			"intg.call_failed", "wso2 intg build run order-api"},
+			"intg.call_failed", "wso2 intg integration build run order-api"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			stub := newPlatformStub(t, map[string]stubRoute{"POST /components/order-api/builds": {status: c.status, body: c.body}})
 
-			outcome := run([]string{"build", "run"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
+			outcome := run([]string{"integration", "build", "run"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 			assertProblem(t, outcome, c.code, problem.CategoryProductService)
 			if !strings.Contains(outcome.Problem.Recovery, c.recovery) {
@@ -134,13 +134,13 @@ func TestBuildRunMapsItsRefusals(t *testing.T) {
 func TestBuildListReportsTheBuildsNewestFirst(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{"/components/order-api/builds": {status: http.StatusOK, body: orderAPIBuilds}})
 
-	outcome := run([]string{"build", "list"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "build", "list"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
 		t.Fatalf("build list failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if outcome.Result.Schema != BuildsSchema || field(outcome, "count") != "2" ||
-		field(outcome, "component") != "order-api" {
+		field(outcome, "integration") != "order-api" {
 		t.Errorf("result = %+v", outcome.Result.Fields)
 	}
 	assertColumns(t, outcome, "name", "status", "trigger", "commit", "started", "completed")
@@ -152,10 +152,10 @@ func TestBuildListReportsTheBuildsNewestFirst(t *testing.T) {
 func TestAnEmptyBuildListNamesBuildRun(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{"/components/order-api/builds": {status: http.StatusOK, body: `{"items":[]}`}})
 
-	outcome := run([]string{"build", "list"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "build", "list"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
-	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg build run order-api") {
-		t.Errorf("next = %q, want it to name wso2 intg build run order-api", next)
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration build run order-api") {
+		t.Errorf("next = %q, want it to name wso2 intg integration build run order-api", next)
 	}
 }
 
@@ -166,7 +166,7 @@ func TestBuildShowReportsAFailedBuildAndPointsAtItsLogs(t *testing.T) {
 		"/components/order-api/builds/order-api-workflow-b1": {status: http.StatusOK, body: failedBuild},
 	})
 
-	outcome := run([]string{"build", "show"}, []string{"order-api", "order-api-workflow-b1"}, stub.endpoint(),
+	outcome := run([]string{"integration", "build", "show"}, []string{"order-api", "order-api-workflow-b1"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
@@ -176,7 +176,7 @@ func TestBuildShowReportsAFailedBuildAndPointsAtItsLogs(t *testing.T) {
 		t.Errorf("schema = %q, want %q", outcome.Result.Schema, BuildSchema)
 	}
 	want := []struct{ name, value string }{
-		{"name", "order-api-workflow-b1"}, {"component", "order-api"}, {"project", "orders"}, {"status", "Failed"},
+		{"name", "order-api-workflow-b1"}, {"integration", "order-api"}, {"project", "orders"}, {"status", "Failed"},
 		{"trigger", "initial"}, {"commit", "fedcba9876543210fedcba9876543210fedcba98"}, {"image", "-"},
 		{"started", "2026-10-27T09:00:00Z"}, {"completed", "2026-10-27T09:04:00Z"},
 		{"steps", "clone: Succeeded\nbuild: Failed"},
@@ -187,7 +187,7 @@ func TestBuildShowReportsAFailedBuildAndPointsAtItsLogs(t *testing.T) {
 			t.Errorf("field %d = %s=%q, want %s=%q", i, got.Name, got.Value, w.name, w.value)
 		}
 	}
-	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg build logs order-api order-api-workflow-b1") {
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration build logs order-api order-api-workflow-b1") {
 		t.Errorf("next = %q, want it to name the logs of this build", next)
 	}
 }
@@ -197,9 +197,9 @@ func TestBuildShowOfARunningBuildSaysToFollowIt(t *testing.T) {
 		"/components/order-api/builds/b2": {status: http.StatusOK, body: `{"name":"b2","status":"Running","trigger":"manual"}`},
 	})
 
-	outcome := run([]string{"build", "show"}, []string{"order-api", "b2"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "build", "show"}, []string{"order-api", "b2"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
-	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg build show order-api b2") {
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration build show order-api b2") {
 		t.Errorf("next = %q, want it to name build show again", next)
 	}
 }
@@ -211,17 +211,17 @@ func TestBuildShowOfAnUnknownBuildNamesTheListing(t *testing.T) {
 		"/components/order-api/builds/nope": {status: http.StatusInternalServerError, body: `{"error":"Internal Server Error","message":"failed to get build status"}`},
 	})
 
-	outcome := run([]string{"build", "show"}, []string{"order-api", "nope"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "build", "show"}, []string{"order-api", "nope"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.call_failed", problem.CategoryProductService)
-	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg build list order-api") {
-		t.Errorf("recovery = %q, want it to name wso2 intg build list order-api", outcome.Problem.Recovery)
+	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg integration build list order-api") {
+		t.Errorf("recovery = %q, want it to name wso2 intg integration build list order-api", outcome.Problem.Recovery)
 	}
 }
 
-func TestBuildShowNeedsAComponentAndABuild(t *testing.T) {
+func TestBuildShowNeedsAIntegrationAndABuild(t *testing.T) {
 	for _, arguments := range [][]string{nil, {"order-api"}, {"a", "b", "c"}} {
-		outcome := run([]string{"build", "show"}, arguments, "https://unused.example", &testkit.Access{Token: "t"})
+		outcome := run([]string{"integration", "build", "show"}, arguments, "https://unused.example", &testkit.Access{Token: "t"})
 
 		assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)
 	}
@@ -259,7 +259,7 @@ func newLogsDeployment(t *testing.T, status int, entries string) logsDeployment 
 // gateway.
 func (d logsDeployment) logs(arguments ...string) testkit.Outcome {
 	return testkit.Run(context.Background(), moduleOptions(), commands().Commands(), testkit.Invocation{
-		Command:   []string{"build", "logs"},
+		Command:   []string{"integration", "build", "logs"},
 		Arguments: arguments,
 		Context:   module.Context{Name: "wso2cloud", Endpoint: d.api.endpoint(), GatewayEndpoint: d.obs.endpoint()},
 		Access:    &testkit.Access{Token: "exchanged-token"},
@@ -361,7 +361,7 @@ func TestBuildLogsOfARunningBuildSearchesUpToNow(t *testing.T) {
 	if field(outcome, "lines") != "0" || field(outcome, "log") != "-" {
 		t.Errorf("result = %+v, want no lines", outcome.Result.Fields)
 	}
-	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg build show order-api b2") {
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration build show order-api b2") {
 		t.Errorf("next = %q, want it to name build show", next)
 	}
 }
@@ -382,7 +382,7 @@ func TestBuildLogsReportsARefusedQuery(t *testing.T) {
 func TestBuildLogsWithoutAGatewayNamesHowToRecordOne(t *testing.T) {
 	stub := newPlatformStub(t, nil)
 
-	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "build", "logs"}, []string{"order-api", "b1"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.observability_not_recorded", problem.CategoryAuthPolicy)
 	for _, want := range []string{"wso2 context product add intg", "--gateway"} {
@@ -396,7 +396,7 @@ func TestBuildLogsWithoutAGatewayNamesHowToRecordOne(t *testing.T) {
 }
 
 func TestBuildLogsRefusesANegativeTail(t *testing.T) {
-	outcome := run([]string{"build", "logs"}, []string{"order-api", "b1", "--tail", "-3"}, "https://unused.example",
+	outcome := run([]string{"integration", "build", "logs"}, []string{"order-api", "b1", "--tail", "-3"}, "https://unused.example",
 		&testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)

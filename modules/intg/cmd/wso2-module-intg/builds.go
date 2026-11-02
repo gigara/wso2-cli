@@ -38,7 +38,7 @@ import (
 // BuildStartSchema identifies an accepted build request.
 const BuildStartSchema = "intg.buildStart/v1"
 
-// BuildsSchema identifies a component's build listing.
+// BuildsSchema identifies an integration's build listing.
 const BuildsSchema = "intg.builds/v1"
 
 // BuildSchema identifies one build.
@@ -57,16 +57,16 @@ const shortCommitLength = 12
 // build is the part of the API's WorkflowRun this module reports. Builds are
 // named by the platform, and a name is what build show and build logs take.
 type build struct {
-	Name      string `json:"name"`
-	Status    string `json:"status"`
-	Trigger   string `json:"trigger"`
-	Component string `json:"componentName"`
-	Project   string `json:"projectName"`
-	Commit    string `json:"commit"`
-	Image     string `json:"image"`
-	Started   string `json:"startedAt"`
-	Completed string `json:"completedAt"`
-	Tasks     []struct {
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	Trigger     string `json:"trigger"`
+	Integration string `json:"componentName"`
+	Project     string `json:"projectName"`
+	Commit      string `json:"commit"`
+	Image       string `json:"image"`
+	Started     string `json:"startedAt"`
+	Completed   string `json:"completedAt"`
+	Tasks       []struct {
 		Name  string `json:"name"`
 		Phase string `json:"phase"`
 	} `json:"tasks"`
@@ -88,26 +88,26 @@ func (b build) steps() string {
 	return orDash(strings.Join(lines, "\n"))
 }
 
-func buildsPath(componentID string) string {
-	return componentPath(componentID) + "/builds"
+func buildsPath(integrationID string) string {
+	return integrationPath(integrationID) + "/builds"
 }
 
-func buildPath(componentID, buildName string) string {
-	return buildsPath(componentID) + "/" + url.PathEscape(buildName)
+func buildPath(integrationID, buildName string) string {
+	return buildsPath(integrationID) + "/" + url.PathEscape(buildName)
 }
 
 // buildListRecovery is where to find a build's name.
-func buildListRecovery(componentID string) string {
-	return "Run wso2 intg build list " + componentID + " to see the names of its builds."
+func buildListRecovery(integrationID string) string {
+	return "Run wso2 intg integration build list " + integrationID + " to see the names of its builds."
 }
 
-// buildRunFlags are the options of "wso2 intg build run".
+// buildRunFlags are the options of "wso2 intg integration build run".
 type buildRunFlags struct {
 	commit string
 	waitFlags
 }
 
-// buildRun answers "wso2 intg build run <component> [--commit <sha>]".
+// buildRun answers "wso2 intg integration build run <integration> [--commit <sha>]".
 //
 // The API accepts the request without naming the build it started, so the
 // result names the listing where it appears, newest first. With --wait the
@@ -115,8 +115,8 @@ type buildRunFlags struct {
 // name that was not there before, and it is followed until it finishes.
 func buildRun(command *cobra.Command, flags *buildRunFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		componentID, err := exactlyOneArgument(command.Flags().Args(), "name the component to build",
-			"Run wso2 intg build run <component> [--commit <sha>].")
+		integrationID, err := exactlyOneArgument(command.Flags().Args(), "name the integration to build",
+			"Run wso2 intg integration build run <integration> [--commit <sha>].")
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -126,7 +126,7 @@ func buildRun(command *cobra.Command, flags *buildRunFlags) module.Handler {
 			if !fullCommitSHA.MatchString(flags.commit) {
 				return result.Result{}, usageProblem("--commit "+flags.commit+" is not a full 40-character commit SHA, "+
 					"and a build can fetch only a full one", "Give the full SHA, or leave --commit out to build the "+
-					"head of the component's branch.")
+					"head of the integration's branch.")
 			}
 			body["sha"] = strings.ToLower(flags.commit)
 			commit = body["sha"]
@@ -140,7 +140,7 @@ func buildRun(command *cobra.Command, flags *buildRunFlags) module.Handler {
 		}
 		var before map[string]bool
 		if flags.wait {
-			listed, err := listBuilds(ctx, client, componentID, request.Context.Endpoint)
+			listed, err := listBuilds(ctx, client, integrationID, request.Context.Endpoint)
 			if err != nil {
 				return result.Result{}, err
 			}
@@ -152,35 +152,35 @@ func buildRun(command *cobra.Command, flags *buildRunFlags) module.Handler {
 		var accepted struct {
 			Message string `json:"message"`
 		}
-		if err := client.Post(ctx, buildsPath(componentID), body, &accepted); err != nil {
+		if err := client.Post(ctx, buildsPath(integrationID), body, &accepted); err != nil {
 			if refused, ok := refusal(err, http.StatusBadGateway); ok {
 				return result.Result{}, problem.New(problem.CategoryProductService, "intg.call_failed",
-					"the Integration Platform could not start a build of "+componentID+": "+refusalWords(refused)).
-					WithRecovery("Run wso2 intg build run " + componentID + " again.")
+					"the Integration Platform could not start a build of "+integrationID+": "+refusalWords(refused)).
+					WithRecovery("Run wso2 intg integration build run " + integrationID + " again.")
 			}
-			return result.Result{}, callFailedNaming(err, "start a build of "+componentID, request.Context.Endpoint,
-				componentListRecovery(""))
+			return result.Result{}, callFailedNaming(err, "start a build of "+integrationID, request.Context.Endpoint,
+				integrationListRecovery(""))
 		}
 		if flags.wait {
-			return waitForBuild(ctx, client, componentID, before, flags.timeout, request.Context.Endpoint)
+			return waitForBuild(ctx, client, integrationID, before, flags.timeout, request.Context.Endpoint)
 		}
 		return result.New(BuildStartSchema).
-			With("component", "Component", componentID).
+			With("integration", "Integration", integrationID).
 			With("commit", "Commit", commit).
 			With("message", "Message", orDash(accepted.Message)).
-			With(NextField, "Next", "Run wso2 intg build list "+componentID+" to see it; the newest build is "+
+			With(NextField, "Next", "Run wso2 intg integration build list "+integrationID+" to see it; the newest build is "+
 				"listed first."), nil
 	}
 }
 
-// buildList answers "wso2 intg build list <component>".
+// buildList answers "wso2 intg integration build list <integration>".
 //
 // The API returns at most 20 builds, newest first, with no continuation
 // cursor.
 func buildList(command *cobra.Command) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		componentID, err := exactlyOneArgument(command.Flags().Args(), "name the component whose builds to list",
-			"Run wso2 intg build list <component>.")
+		integrationID, err := exactlyOneArgument(command.Flags().Args(), "name the integration whose builds to list",
+			"Run wso2 intg integration build list <integration>.")
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -188,12 +188,12 @@ func buildList(command *cobra.Command) module.Handler {
 		if err != nil {
 			return result.Result{}, err
 		}
-		builds, err := listBuilds(ctx, client, componentID, request.Context.Endpoint)
+		builds, err := listBuilds(ctx, client, integrationID, request.Context.Endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
 		report := result.New(BuildsSchema).
-			With("component", "Component", componentID).
+			With("integration", "Integration", integrationID).
 			With("count", "Builds", strconv.Itoa(len(builds))).
 			WithColumn("name", "Name").
 			WithColumn("status", "Status").
@@ -205,19 +205,19 @@ func buildList(command *cobra.Command) module.Handler {
 			report = report.WithRow(b.Name, orDash(b.Status), orDash(b.Trigger), b.shortCommit(), orDash(b.Started),
 				orDash(b.Completed))
 		}
-		next := "Run wso2 intg build show " + componentID + " <build> to see one build."
+		next := "Run wso2 intg integration build show " + integrationID + " <build> to see one build."
 		if len(builds) == 0 {
-			next = "It has no builds yet. Start one with wso2 intg build run " + componentID + "."
+			next = "It has no builds yet. Start one with wso2 intg integration build run " + integrationID + "."
 		}
 		return report.With(NextField, "Next", next), nil
 	}
 }
 
-// buildShow answers "wso2 intg build show <component> <build>".
+// buildShow answers "wso2 intg integration build show <integration> <build>".
 func buildShow(command *cobra.Command) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		componentID, buildName, err := exactlyTwoArguments(command.Flags().Args(),
-			"name the component and the build to show", "Run wso2 intg build show <component> <build>.")
+		integrationID, buildName, err := exactlyTwoArguments(command.Flags().Args(),
+			"name the integration and the build to show", "Run wso2 intg integration build show <integration> <build>.")
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -226,22 +226,22 @@ func buildShow(command *cobra.Command) module.Handler {
 			return result.Result{}, err
 		}
 		var found build
-		if err := client.Get(ctx, buildPath(componentID, buildName), &found); err != nil {
-			return result.Result{}, buildReadFailed(err, "show the build "+buildName+" of "+componentID,
-				request.Context.Endpoint, componentID)
+		if err := client.Get(ctx, buildPath(integrationID, buildName), &found); err != nil {
+			return result.Result{}, buildReadFailed(err, "show the build "+buildName+" of "+integrationID,
+				request.Context.Endpoint, integrationID)
 		}
 		if found.Name == "" {
 			found.Name = buildName
 		}
-		if found.Component == "" {
-			found.Component = componentID
+		if found.Integration == "" {
+			found.Integration = integrationID
 		}
-		next := "Run wso2 intg build logs " + componentID + " " + found.Name + " to see its output."
+		next := "Run wso2 intg integration build logs " + integrationID + " " + found.Name + " to see its output."
 		switch found.Status {
 		case "Failed":
-			next = "Run wso2 intg build logs " + componentID + " " + found.Name + " to see why it failed."
+			next = "Run wso2 intg integration build logs " + integrationID + " " + found.Name + " to see why it failed."
 		case "Pending", "Running":
-			next = "Run wso2 intg build show " + componentID + " " + found.Name + " again to follow it."
+			next = "Run wso2 intg integration build show " + integrationID + " " + found.Name + " again to follow it."
 		}
 		return buildReport(found, next), nil
 	}
@@ -251,7 +251,7 @@ func buildShow(command *cobra.Command) module.Handler {
 func buildReport(found build, next string) result.Result {
 	return result.New(BuildSchema).
 		With("name", "Name", found.Name).
-		With("component", "Component", found.Component).
+		With("integration", "Integration", found.Integration).
 		With("project", "Project", orDash(found.Project)).
 		With("status", "Status", orDash(found.Status)).
 		With("trigger", "Trigger", orDash(found.Trigger)).
@@ -263,25 +263,25 @@ func buildReport(found build, next string) result.Result {
 		With(NextField, "Next", next)
 }
 
-// listBuilds reads a component's recent builds, newest first.
-func listBuilds(ctx context.Context, client platform.Client, componentID, endpoint string) ([]build, error) {
+// listBuilds reads an integration's recent builds, newest first.
+func listBuilds(ctx context.Context, client platform.Client, integrationID, endpoint string) ([]build, error) {
 	var listing struct {
 		Items []build `json:"items"`
 	}
-	if err := client.Get(ctx, buildsPath(componentID), &listing); err != nil {
-		return nil, callFailedNaming(err, "list the builds of "+componentID, endpoint, componentListRecovery(""))
+	if err := client.Get(ctx, buildsPath(integrationID), &listing); err != nil {
+		return nil, callFailedNaming(err, "list the builds of "+integrationID, endpoint, integrationListRecovery(""))
 	}
 	return listing.Items, nil
 }
 
 // waitForBuild finds the build a request just started, as the newest one the
 // listing did not hold before, and follows it until it finishes.
-func waitForBuild(ctx context.Context, client platform.Client, componentID string, before map[string]bool,
+func waitForBuild(ctx context.Context, client platform.Client, integrationID string, before map[string]bool,
 	limit time.Duration, endpoint string) (result.Result, error) {
 	deadline := time.Now().Add(limit)
 	var found build
 	err := poll(ctx, limit, func() (bool, error) {
-		listed, err := listBuilds(ctx, client, componentID, endpoint)
+		listed, err := listBuilds(ctx, client, integrationID, endpoint)
 		if err != nil {
 			return false, err
 		}
@@ -295,52 +295,52 @@ func waitForBuild(ctx context.Context, client platform.Client, componentID strin
 	})
 	if errors.Is(err, errWaitTimeout) {
 		return result.Result{}, problem.New(problem.CategoryProductService, "intg.wait_timeout",
-			"the build of "+componentID+" did not appear within "+limit.String()).
-			WithRecovery("Run wso2 intg build list " + componentID + " to see whether it started.")
+			"the build of "+integrationID+" did not appear within "+limit.String()).
+			WithRecovery("Run wso2 intg integration build list " + integrationID + " to see whether it started.")
 	}
 	if err != nil {
 		return result.Result{}, err
 	}
 	err = poll(ctx, time.Until(deadline), func() (bool, error) {
-		if err := client.Get(ctx, buildPath(componentID, found.Name), &found); err != nil {
-			return false, buildReadFailed(err, "follow the build "+found.Name+" of "+componentID, endpoint, componentID)
+		if err := client.Get(ctx, buildPath(integrationID, found.Name), &found); err != nil {
+			return false, buildReadFailed(err, "follow the build "+found.Name+" of "+integrationID, endpoint, integrationID)
 		}
 		return !buildInProgress(found.Status), nil
 	})
 	if errors.Is(err, errWaitTimeout) {
 		return result.Result{}, problem.New(problem.CategoryProductService, "intg.wait_timeout",
-			"the build "+found.Name+" of "+componentID+" was still "+orDash(found.Status)+" after "+limit.String()).
-			WithRecovery("Run wso2 intg build show " + componentID + " " + found.Name + " to follow it.")
+			"the build "+found.Name+" of "+integrationID+" was still "+orDash(found.Status)+" after "+limit.String()).
+			WithRecovery("Run wso2 intg integration build show " + integrationID + " " + found.Name + " to follow it.")
 	}
 	if err != nil {
 		return result.Result{}, err
 	}
-	if found.Component == "" {
-		found.Component = componentID
+	if found.Integration == "" {
+		found.Integration = integrationID
 	}
 	if found.Status != "Succeeded" {
 		return result.Result{}, problem.New(problem.CategoryProductService, "intg.build_failed",
-			"the build "+found.Name+" of "+componentID+" finished as "+found.Status).
-			WithRecovery("Run wso2 intg build logs " + componentID + " " + found.Name + " to see why.")
+			"the build "+found.Name+" of "+integrationID+" finished as "+found.Status).
+			WithRecovery("Run wso2 intg integration build logs " + integrationID + " " + found.Name + " to see why.")
 	}
-	return buildReport(found, "Run wso2 intg component deploy "+componentID+" --env <environment> --build "+
+	return buildReport(found, "Run wso2 intg integration deploy "+integrationID+" --env <environment> --build "+
 		found.Name+" to deploy it."), nil
 }
 
 // buildReadFailed maps a refused read of one build. The API answers a build
 // name it does not know with a 500 rather than a 404, so a 500 here points at
 // the listing too.
-func buildReadFailed(err error, attempted, endpoint, componentID string) error {
+func buildReadFailed(err error, attempted, endpoint, integrationID string) error {
 	if refused, ok := refusal(err, http.StatusInternalServerError); ok {
 		return problem.New(problem.CategoryProductService, "intg.call_failed",
 			"the Integration Platform could not "+attempted+": "+refusalWords(refused)).
-			WithRecovery("Check the build name: " + buildListRecovery(componentID) + " If the name is right, retry " +
+			WithRecovery("Check the build name: " + buildListRecovery(integrationID) + " If the name is right, retry " +
 				"in a moment.")
 	}
-	return callFailedNaming(err, attempted, endpoint, buildListRecovery(componentID))
+	return callFailedNaming(err, attempted, endpoint, buildListRecovery(integrationID))
 }
 
-// buildLogsFlags are the options of "wso2 intg build logs".
+// buildLogsFlags are the options of "wso2 intg integration build logs".
 type buildLogsFlags struct {
 	tail int
 }
@@ -451,15 +451,15 @@ func lineCount(shown, total int) string {
 	return count
 }
 
-// buildLogs answers "wso2 intg build logs <component> <build> [--tail <n>]".
+// buildLogs answers "wso2 intg integration build logs <integration> <build> [--tail <n>]".
 //
 // The build is read first, which confirms it exists and bounds the search to
 // its run. The log is then queried from the observability proxy, recorded on
 // the context as the product's gateway, as the workflow run of that name.
 func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		componentID, buildName, err := exactlyTwoArguments(command.Flags().Args(),
-			"name the component and the build whose log to show", "Run wso2 intg build logs <component> <build>.")
+		integrationID, buildName, err := exactlyTwoArguments(command.Flags().Args(),
+			"name the integration and the build whose log to show", "Run wso2 intg integration build logs <integration> <build>.")
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -475,24 +475,24 @@ func buildLogs(command *cobra.Command, flags *buildLogsFlags) module.Handler {
 			return result.Result{}, err
 		}
 		var found build
-		if err := client.Get(ctx, buildPath(componentID, buildName), &found); err != nil {
-			return result.Result{}, buildReadFailed(err, "find the build "+buildName+" of "+componentID,
-				request.Context.Endpoint, componentID)
+		if err := client.Get(ctx, buildPath(integrationID, buildName), &found); err != nil {
+			return result.Result{}, buildReadFailed(err, "find the build "+buildName+" of "+integrationID,
+				request.Context.Endpoint, integrationID)
 		}
 		start, end := found.logWindow(time.Now().UTC())
 		lines, total, err := queryLogs(ctx, request, client.Token, map[string]string{"workflowRunName": buildName},
-			start, end, flags.tail, "read the log of the build "+buildName+" of "+componentID)
+			start, end, flags.tail, "read the log of the build "+buildName+" of "+integrationID)
 		if err != nil {
 			return result.Result{}, err
 		}
-		next := "Run wso2 intg build show " + componentID + " " + buildName + " to see its status."
+		next := "Run wso2 intg integration build show " + integrationID + " " + buildName + " to see its status."
 		if len(lines) == 0 {
-			next = "There is no output yet; it appears once the build runs. Run wso2 intg build show " +
-				componentID + " " + buildName + " to see its status."
+			next = "There is no output yet; it appears once the build runs. Run wso2 intg integration build show " +
+				integrationID + " " + buildName + " to see its status."
 		}
 		return result.New(BuildLogsSchema).
 			With("build", "Build", buildName).
-			With("component", "Component", componentID).
+			With("integration", "Integration", integrationID).
 			With("lines", "Lines", lineCount(len(lines), total)).
 			With("log", "Log", orDash(strings.Join(lines, "\n"))).
 			With(NextField, "Next", next), nil

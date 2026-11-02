@@ -28,31 +28,31 @@ import (
 	"github.com/wso2/wso2-cli/sdk/result"
 )
 
-// ComponentLogsSchema identifies a component's runtime log in one environment.
-const ComponentLogsSchema = "intg.componentLogs/v1"
+// IntegrationLogsSchema identifies an integration's runtime log in one environment.
+const IntegrationLogsSchema = "intg.integrationLogs/v1"
 
-// defaultLogTail is how many of the newest lines component logs shows when
+// defaultLogTail is how many of the newest lines integration logs shows when
 // --tail is not given.
 const defaultLogTail = 100
 
-// componentLogsFlags are the options of "wso2 intg component logs".
-type componentLogsFlags struct {
+// integrationLogsFlags are the options of "wso2 intg integration logs".
+type integrationLogsFlags struct {
 	env     string
 	since   string
 	tail    int
 	project string
 }
 
-// componentLogs answers "wso2 intg component logs <component> --env <environment>".
+// integrationLogs answers "wso2 intg integration logs <integration> --env <environment>".
 //
 // The log is queried from the observability proxy the way the console queries
-// it, scoped to the component in one environment of its project. The observer
-// takes the project, component and environment by name and resolves them
+// it, scoped to the integration in one environment of its project. The observer
+// takes the project, integration and environment by name and resolves them
 // itself.
-func componentLogs(command *cobra.Command, flags *componentLogsFlags) module.Handler {
+func integrationLogs(command *cobra.Command, flags *integrationLogsFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		recovery := "Run wso2 intg component logs <component> --env <environment> [--since <duration>] [--tail <n>]."
-		componentID, err := exactlyOneArgument(command.Flags().Args(), "name the component whose logs to show",
+		recovery := "Run wso2 intg integration logs <integration> --env <environment> [--since <duration>] [--tail <n>]."
+		integrationID, err := exactlyOneArgument(command.Flags().Args(), "name the integration whose logs to show",
 			recovery)
 		if err != nil {
 			return result.Result{}, err
@@ -85,25 +85,25 @@ func componentLogs(command *cobra.Command, flags *componentLogsFlags) module.Han
 		if err != nil {
 			return result.Result{}, err
 		}
-		project, err := componentProject(ctx, client, componentID, projectOf(flags.project, request), endpoint)
+		project, err := integrationProject(ctx, client, integrationID, projectOf(flags.project, request), endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
 		end := time.Now().UTC().Truncate(time.Second)
 		lines, total, err := queryLogs(ctx, request, client.Token,
-			map[string]string{"project": project, "component": componentID, "environment": env.ID},
-			end.Add(-since), end, flags.tail, "read the logs of "+componentID+" in "+env.ID)
+			map[string]string{"project": project, "component": integrationID, "environment": env.ID},
+			end.Add(-since), end, flags.tail, "read the logs of "+integrationID+" in "+env.ID)
 		if err != nil {
 			return result.Result{}, err
 		}
-		next := "Run wso2 intg component logs " + componentID + " --env " + env.ID + " --since <duration> to look " +
+		next := "Run wso2 intg integration logs " + integrationID + " --env " + env.ID + " --since <duration> to look " +
 			"further back."
 		if len(lines) == 0 {
-			next = "There is no output in that time. Run wso2 intg deployment show " + componentID + " --env " +
+			next = "There is no output in that time. Run wso2 intg integration deployment show " + integrationID + " --env " +
 				env.ID + " to see whether it runs there."
 		}
-		return result.New(ComponentLogsSchema).
-			With("component", "Component", componentID).
+		return result.New(IntegrationLogsSchema).
+			With("integration", "Integration", integrationID).
 			With("environment", "Environment", env.ID).
 			With("since", "Since", since.String()).
 			With("lines", "Lines", lineCount(len(lines), total)).

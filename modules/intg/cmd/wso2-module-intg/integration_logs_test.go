@@ -33,7 +33,7 @@ const runtimeLogEntries = `{"logs":[
   {"timestamp":"2026-10-29T10:00:01Z","log":"service started on 9090","level":"INFO"}],"total":2,"tookMs":8}`
 
 // runtimeLogs is the API, answering the environments, the project orders and
-// its components, beside the observability proxy answering the log query.
+// its integrations, beside the observability proxy answering the log query.
 type runtimeLogs struct {
 	api, obs *platformStub
 }
@@ -42,7 +42,7 @@ func newRuntimeLogs(t *testing.T, entries string) runtimeLogs {
 	return runtimeLogs{
 		api: newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
 			"/projects":                   {status: http.StatusOK, body: `{"items":[{"id":"orders"}]}`},
-			"/projects/orders/components": {status: http.StatusOK, body: ordersComponents},
+			"/projects/orders/components": {status: http.StatusOK, body: ordersIntegrations},
 		})),
 		obs: newStubAt(t, obsPrefix, map[string]stubRoute{"POST " + logsQueryPath: {status: http.StatusOK, body: entries}}),
 	}
@@ -50,20 +50,20 @@ func newRuntimeLogs(t *testing.T, entries string) runtimeLogs {
 
 func (r runtimeLogs) logs(arguments ...string) testkit.Outcome {
 	return testkit.Run(context.Background(), moduleOptions(), commands().Commands(), testkit.Invocation{
-		Command:   []string{"component", "logs"},
+		Command:   []string{"integration", "logs"},
 		Arguments: arguments,
 		Context:   module.Context{Name: "wso2cloud", Endpoint: r.api.endpoint(), GatewayEndpoint: r.obs.endpoint()},
 		Access:    &testkit.Access{Token: "exchanged-token"},
 	})
 }
 
-func TestComponentLogsQueriesTheProxyForTheComponentInOneEnvironment(t *testing.T) {
+func TestIntegrationLogsQueriesTheProxyForTheIntegrationInOneEnvironment(t *testing.T) {
 	r := newRuntimeLogs(t, runtimeLogEntries)
 
 	outcome := r.logs("order-api", "--env", "Development")
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component logs failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration logs failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if r.obs.path != obsPrefix+logsQueryPath || r.obs.presented != "Bearer exchanged-token" {
 		t.Errorf("the proxy was called at %s with %q", r.obs.path, r.obs.presented)
@@ -88,7 +88,7 @@ func TestComponentLogsQueriesTheProxyForTheComponentInOneEnvironment(t *testing.
 	if time.Since(end) > time.Minute || end.Sub(start) != time.Hour {
 		t.Errorf("window = %v to %v, want the last hour", start, end)
 	}
-	if outcome.Result.Schema != ComponentLogsSchema || field(outcome, "environment") != "development" ||
+	if outcome.Result.Schema != IntegrationLogsSchema || field(outcome, "environment") != "development" ||
 		field(outcome, "since") != "1h0m0s" {
 		t.Errorf("result = %+v", outcome.Result.Fields)
 	}
@@ -99,26 +99,26 @@ func TestComponentLogsQueriesTheProxyForTheComponentInOneEnvironment(t *testing.
 	assertEndsWithNext(t, outcome)
 }
 
-func TestComponentLogsWithAProjectDoesNotReadTheListing(t *testing.T) {
+func TestIntegrationLogsWithAProjectDoesNotReadTheListing(t *testing.T) {
 	r := newRuntimeLogs(t, runtimeLogEntries)
 
 	outcome := r.logs("order-api", "--env", "development", "--project", "orders")
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component logs failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration logs failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if strings.Join(r.api.paths, ", ") != "GET "+basePath+"/environments" {
 		t.Errorf("API calls = %v, want only the environments", r.api.paths)
 	}
 }
 
-func TestComponentLogsSinceAndAWholeWindow(t *testing.T) {
+func TestIntegrationLogsSinceAndAWholeWindow(t *testing.T) {
 	r := newRuntimeLogs(t, runtimeLogEntries)
 
 	outcome := r.logs("order-api", "--env", "development", "--project", "orders", "--since", "30m", "--tail", "0")
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component logs failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration logs failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	sent := decodeBody(t, r.obs.body)
 	start, _ := time.Parse(time.RFC3339, sent["startTime"].(string))
@@ -131,7 +131,7 @@ func TestComponentLogsSinceAndAWholeWindow(t *testing.T) {
 	}
 }
 
-func TestComponentLogsWithNoOutputPointsAtTheDeployment(t *testing.T) {
+func TestIntegrationLogsWithNoOutputPointsAtTheDeployment(t *testing.T) {
 	r := newRuntimeLogs(t, `{"logs":[],"total":0}`)
 
 	outcome := r.logs("order-api", "--env", "development", "--project", "orders")
@@ -139,19 +139,19 @@ func TestComponentLogsWithNoOutputPointsAtTheDeployment(t *testing.T) {
 	if field(outcome, "lines") != "0" || field(outcome, "log") != "-" {
 		t.Errorf("result = %+v, want no lines", outcome.Result.Fields)
 	}
-	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg deployment show order-api --env development") {
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration deployment show order-api --env development") {
 		t.Errorf("next = %q, want it to name deployment show", next)
 	}
 }
 
-func TestComponentLogsRefusesABadCommandLineBeforeAnyCall(t *testing.T) {
+func TestIntegrationLogsRefusesABadCommandLineBeforeAnyCall(t *testing.T) {
 	cases := map[string][]string{
-		"no environment": {"order-api"},
-		"bad since":      {"order-api", "--env", "development", "--since", "yesterday"},
-		"negative since": {"order-api", "--env", "development", "--since", "-1h"},
-		"negative tail":  {"order-api", "--env", "development", "--tail", "-1"},
-		"no component":   {"--env", "development"},
-		"two components": {"a", "b", "--env", "development"},
+		"no environment":   {"order-api"},
+		"bad since":        {"order-api", "--env", "development", "--since", "yesterday"},
+		"negative since":   {"order-api", "--env", "development", "--since", "-1h"},
+		"negative tail":    {"order-api", "--env", "development", "--tail", "-1"},
+		"no integration":   {"--env", "development"},
+		"two integrations": {"a", "b", "--env", "development"},
 	}
 	for name, arguments := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -159,7 +159,11 @@ func TestComponentLogsRefusesABadCommandLineBeforeAnyCall(t *testing.T) {
 
 			outcome := r.logs(arguments...)
 
-			assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)
+			code := "intg.invalid_argument"
+			if name == "no environment" {
+				code = "module.flag_required"
+			}
+			assertProblem(t, outcome, code, problem.CategoryUsage)
 			if r.api.calls != 0 || r.obs.calls != 0 {
 				t.Errorf("a refused command line reached a service (%v %v)", r.api.paths, r.obs.paths)
 			}
@@ -167,10 +171,10 @@ func TestComponentLogsRefusesABadCommandLineBeforeAnyCall(t *testing.T) {
 	}
 }
 
-func TestComponentLogsWithoutAGatewayNamesHowToRecordOne(t *testing.T) {
+func TestIntegrationLogsWithoutAGatewayNamesHowToRecordOne(t *testing.T) {
 	stub := newPlatformStub(t, nil)
 
-	outcome := run([]string{"component", "logs"}, []string{"order-api", "--env", "development"}, stub.endpoint(),
+	outcome := run([]string{"integration", "logs"}, []string{"order-api", "--env", "development"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.observability_not_recorded", problem.CategoryAuthPolicy)

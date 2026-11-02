@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -100,14 +101,29 @@ func buildInProgress(status string) bool {
 	return status == "" || status == "Pending" || status == "Running"
 }
 
-// waitForRollout polls what componentID runs in environmentID until release
+// waitForRollout polls what integrationID runs in environmentID until release
 // (or, when release is empty, any release) is active, and returns it. A
 // rollout that ends in ERROR or SUSPENDED is intg.deployment_failed.
-func waitForRollout(ctx context.Context, client platform.Client, componentID, environmentID, release string,
+func waitForRollout(ctx context.Context, client platform.Client, integrationID, environmentID, release string,
 	limit time.Duration, endpoint string) (deployment, error) {
+	return waitUntilActive(ctx, client, integrationID, environmentID, release, limit, endpoint, "ERROR", "SUSPENDED")
+}
+
+// waitForRestart polls what integrationID runs in environmentID until it is
+// active after a redeploy. A stopped release reads SUSPENDED until it starts
+// again, so only ERROR ends the wait early.
+func waitForRestart(ctx context.Context, client platform.Client, integrationID, environmentID string,
+	limit time.Duration, endpoint string) (deployment, error) {
+	return waitUntilActive(ctx, client, integrationID, environmentID, "", limit, endpoint, "ERROR")
+}
+
+// waitUntilActive polls until the release (any release when empty) is
+// ACTIVE, failing as intg.deployment_failed on any of the failed statuses.
+func waitUntilActive(ctx context.Context, client platform.Client, integrationID, environmentID, release string,
+	limit time.Duration, endpoint string, failed ...string) (deployment, error) {
 	var current deployment
 	err := poll(ctx, limit, func() (bool, error) {
-		found, err := currentDeployment(ctx, client, componentID, environmentID, endpoint)
+		found, err := currentDeployment(ctx, client, integrationID, environmentID, endpoint)
 		if err != nil {
 			return false, err
 		}
@@ -115,13 +131,13 @@ func waitForRollout(ctx context.Context, client platform.Client, componentID, en
 		if !found.deployed() || (release != "" && found.Release != release) {
 			return false, nil
 		}
-		switch found.Status {
-		case "ACTIVE":
+		switch {
+		case found.Status == "ACTIVE":
 			return true, nil
-		case "ERROR", "SUSPENDED":
+		case slices.Contains(failed, found.Status):
 			return false, problem.New(problem.CategoryProductService, "intg.deployment_failed",
-				"the release "+found.Release+" of "+componentID+" is "+found.Status+" in "+environmentID).
-				WithRecovery("Run wso2 intg component logs " + componentID + " --env " + environmentID +
+				"the release "+found.Release+" of "+integrationID+" is "+found.Status+" in "+environmentID).
+				WithRecovery("Run wso2 intg integration logs " + integrationID + " --env " + environmentID +
 					" to see why.")
 		default:
 			return false, nil
@@ -129,8 +145,8 @@ func waitForRollout(ctx context.Context, client platform.Client, componentID, en
 	})
 	if errors.Is(err, errWaitTimeout) {
 		return current, problem.New(problem.CategoryProductService, "intg.wait_timeout",
-			componentID+" was not running in "+environmentID+" within "+limit.String()).
-			WithRecovery("Run wso2 intg deployment show " + componentID + " --env " + environmentID +
+			integrationID+" was not running in "+environmentID+" within "+limit.String()).
+			WithRecovery("Run wso2 intg integration deployment show " + integrationID + " --env " + environmentID +
 				" to see where it stands.")
 	}
 	return current, err

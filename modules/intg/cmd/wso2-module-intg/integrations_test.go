@@ -25,7 +25,7 @@ import (
 	"github.com/wso2/wso2-cli/sdk/testkit"
 )
 
-const ordersComponents = `{"items":[
+const ordersIntegrations = `{"items":[
   {"projectId":"orders","id":"order-api","handler":"order-api","name":"Order API","displayName":"Order API",
    "description":"Takes orders","componentType":"service","buildpackType":"BI","status":"Ready",
    "lastBuildDate":"2026-10-01T10:00:00Z","createdAt":"2026-09-01T10:00:00Z","deleting":false},
@@ -33,7 +33,7 @@ const ordersComponents = `{"items":[
    "componentType":"automation","buildpackType":"MI","status":"BuildFailed",
    "lastBuildDate":"2026-10-02T10:00:00Z","createdAt":"2026-09-02T10:00:00Z","deleting":true}]}`
 
-const paymentsComponents = `{"items":[
+const paymentsIntegrations = `{"items":[
   {"projectId":"payments","id":"refunds","handler":"refunds","name":"Refunds","componentType":"eventIntegration",
    "buildpackType":"other","status":"Ready","lastBuildDate":"","createdAt":"2026-09-03T10:00:00Z"}]}`
 
@@ -42,45 +42,45 @@ const twoProjectIDs = `{"items":[{"id":"orders","name":"Orders"},{"id":"payments
 const orderAPIRepository = `{"gitProvider":"github","organizationApp":"acme","nameApp":"orders-integrations",
   "branch":"main","appSubPath":"/order-api","serverUrl":"https://github.com/acme/orders-integrations.git"}`
 
-// --- component list -------------------------------------------------------
+// --- integration list -------------------------------------------------------
 
-func TestComponentListReportsAProjectsComponentsInCreateTerms(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: ordersComponents}})
+func TestIntegrationListReportsAProjectsIntegrationsInCreateTerms(t *testing.T) {
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: ordersIntegrations}})
 
-	outcome := run([]string{"component", "list"}, []string{"--project", "orders"}, stub.endpoint(),
+	outcome := run([]string{"integration", "list"}, []string{"--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component list failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration list failed: %v %v", outcome.Err, outcome.Problem)
 	}
-	if outcome.Result.Schema != ComponentsSchema {
-		t.Errorf("schema = %q, want %q", outcome.Result.Schema, ComponentsSchema)
+	if outcome.Result.Schema != IntegrationsSchema {
+		t.Errorf("schema = %q, want %q", outcome.Result.Schema, IntegrationsSchema)
 	}
 	if stub.calls != 1 || stub.path != basePath+"/projects/orders/components" {
-		t.Errorf("calls = %v, want one GET of the project's components", stub.paths)
+		t.Errorf("calls = %v, want one GET of the project's integrations", stub.paths)
 	}
 	assertColumns(t, outcome, "name", "id", "project", "type", "runtime", "status", "updated", "state")
 	if field(outcome, "count") != "2" {
 		t.Errorf("count = %q, want 2", field(outcome, "count"))
 	}
-	// The type and runtime read in the words component create takes, not the
+	// The type and runtime read in the words integration create takes, not the
 	// API's own: one word per concept across the command surface.
 	assertRow(t, outcome, 0, "Order API|order-api|orders|integration-as-api|wso2-integrator|Ready|2026-10-01T10:00:00Z|active")
 	assertRow(t, outcome, 1, "Nightly Sync|nightly-sync|orders|automation|wso2-integrator-mi|BuildFailed|2026-10-02T10:00:00Z|deleting")
 	assertEndsWithNext(t, outcome)
 }
 
-func TestComponentListWithoutAProjectReadsEveryProject(t *testing.T) {
+func TestIntegrationListWithoutAProjectReadsEveryProject(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
 		"/projects":                     {status: http.StatusOK, body: twoProjectIDs},
-		"/projects/orders/components":   {status: http.StatusOK, body: ordersComponents},
-		"/projects/payments/components": {status: http.StatusOK, body: paymentsComponents},
+		"/projects/orders/components":   {status: http.StatusOK, body: ordersIntegrations},
+		"/projects/payments/components": {status: http.StatusOK, body: paymentsIntegrations},
 	})
 
-	outcome := run([]string{"component", "list"}, nil, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "list"}, nil, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component list failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration list failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if field(outcome, "count") != "3" || len(outcome.Result.Rows) != 3 {
 		t.Fatalf("count = %q with %d rows, want 3 across both projects", field(outcome, "count"), len(outcome.Result.Rows))
@@ -91,33 +91,33 @@ func TestComponentListWithoutAProjectReadsEveryProject(t *testing.T) {
 	}
 }
 
-func TestAnEmptyComponentListNamesComponentCreate(t *testing.T) {
+func TestAnEmptyIntegrationListNamesIntegrationCreate(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: `{"items":[]}`}})
 
-	outcome := run([]string{"component", "list"}, []string{"--project", "orders"}, stub.endpoint(),
+	outcome := run([]string{"integration", "list"}, []string{"--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
-	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg component create") {
-		t.Errorf("next = %q, want it to name wso2 intg component create", next)
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration create") {
+		t.Errorf("next = %q, want it to name wso2 intg integration create", next)
 	}
 }
 
-// --- component show -------------------------------------------------------
+// --- integration show -------------------------------------------------------
 
-func TestComponentShowFindsTheComponentInItsProjectAndReadsItsRepository(t *testing.T) {
+func TestIntegrationShowFindsTheIntegrationInItsProjectAndReadsItsRepository(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/projects/orders/components":      {status: http.StatusOK, body: ordersComponents},
+		"/projects/orders/components":      {status: http.StatusOK, body: ordersIntegrations},
 		"/components/order-api/repository": {status: http.StatusOK, body: orderAPIRepository},
 	})
 
-	outcome := run([]string{"component", "show"}, []string{"order-api", "--project", "orders"}, stub.endpoint(),
+	outcome := run([]string{"integration", "show"}, []string{"order-api", "--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component show failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration show failed: %v %v", outcome.Err, outcome.Problem)
 	}
-	if outcome.Result.Schema != ComponentSchema {
-		t.Errorf("schema = %q, want %q", outcome.Result.Schema, ComponentSchema)
+	if outcome.Result.Schema != IntegrationSchema {
+		t.Errorf("schema = %q, want %q", outcome.Result.Schema, IntegrationSchema)
 	}
 	want := []struct{ name, value string }{
 		{"id", "order-api"}, {"name", "Order API"}, {"project", "orders"}, {"type", "integration-as-api"},
@@ -137,58 +137,58 @@ func TestComponentShowFindsTheComponentInItsProjectAndReadsItsRepository(t *test
 	assertEndsWithNext(t, outcome)
 }
 
-func TestComponentShowMatchesADisplayNameWhenNoIDMatches(t *testing.T) {
+func TestIntegrationShowMatchesADisplayNameWhenNoIDMatches(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/projects/orders/components":         {status: http.StatusOK, body: ordersComponents},
+		"/projects/orders/components":         {status: http.StatusOK, body: ordersIntegrations},
 		"/components/nightly-sync/repository": {status: http.StatusOK, body: `{}`},
 	})
 
-	outcome := run([]string{"component", "show"}, []string{"Nightly Sync", "--project", "orders"}, stub.endpoint(),
+	outcome := run([]string{"integration", "show"}, []string{"Nightly Sync", "--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component show failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration show failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if field(outcome, "id") != "nightly-sync" || field(outcome, "repository") != "-" {
 		t.Errorf("result = %+v, want nightly-sync with no repository", outcome.Result.Fields)
 	}
 }
 
-func TestComponentShowWithoutAProjectSearchesEveryProject(t *testing.T) {
+func TestIntegrationShowWithoutAProjectSearchesEveryProject(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
 		"/projects":                      {status: http.StatusOK, body: twoProjectIDs},
-		"/projects/orders/components":    {status: http.StatusOK, body: ordersComponents},
-		"/projects/payments/components":  {status: http.StatusOK, body: paymentsComponents},
+		"/projects/orders/components":    {status: http.StatusOK, body: ordersIntegrations},
+		"/projects/payments/components":  {status: http.StatusOK, body: paymentsIntegrations},
 		"/components/refunds/repository": {status: http.StatusOK, body: `{}`},
 	})
 
-	outcome := run([]string{"component", "show"}, []string{"refunds"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "show"}, []string{"refunds"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component show failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration show failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if field(outcome, "project") != "payments" {
 		t.Errorf("project = %q, want payments", field(outcome, "project"))
 	}
 }
 
-func TestComponentShowOfAnUnknownComponentNamesTheListing(t *testing.T) {
-	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: ordersComponents}})
+func TestIntegrationShowOfAnUnknownIntegrationNamesTheListing(t *testing.T) {
+	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: ordersIntegrations}})
 
-	outcome := run([]string{"component", "show"}, []string{"nope", "--project", "orders"}, stub.endpoint(),
+	outcome := run([]string{"integration", "show"}, []string{"nope", "--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.not_found", problem.CategoryProductService)
-	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg component list --project orders") {
-		t.Errorf("recovery = %q, want it to name wso2 intg component list --project orders", outcome.Problem.Recovery)
+	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg integration list --project orders") {
+		t.Errorf("recovery = %q, want it to name wso2 intg integration list --project orders", outcome.Problem.Recovery)
 	}
 }
 
-func TestComponentShowRefusesADisplayNameThatMatchesTwoComponents(t *testing.T) {
+func TestIntegrationShowRefusesADisplayNameThatMatchesTwoIntegrations(t *testing.T) {
 	twins := `{"items":[{"projectId":"orders","id":"sync-a","name":"Sync"},{"projectId":"orders","id":"sync-b","name":"Sync"}]}`
 	stub := newPlatformStub(t, map[string]stubRoute{"/projects/orders/components": {status: http.StatusOK, body: twins}})
 
-	outcome := run([]string{"component", "show"}, []string{"Sync", "--project", "orders"}, stub.endpoint(),
+	outcome := run([]string{"integration", "show"}, []string{"Sync", "--project", "orders"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)
@@ -199,7 +199,7 @@ func TestComponentShowRefusesADisplayNameThatMatchesTwoComponents(t *testing.T) 
 	}
 }
 
-// --- component create -----------------------------------------------------
+// --- integration create -----------------------------------------------------
 
 func createArguments(extra ...string) []string {
 	return append([]string{"order-api", "--project", "orders", "--type", "integration-as-api",
@@ -207,15 +207,15 @@ func createArguments(extra ...string) []string {
 		"--branch", "main"}, extra...)
 }
 
-func TestComponentCreateSendsTheBodyTheMCPToolSends(t *testing.T) {
+func TestIntegrationCreateSendsTheBodyTheMCPToolSends(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {status: http.StatusCreated, body: `{"projectId":"orders","id":"order-api","name":"Order API","componentType":"service","buildpackType":"BI"}`}})
 
-	outcome := run([]string{"component", "create"},
+	outcome := run([]string{"integration", "create"},
 		createArguments("--path", "/order-api", "--display-name", "Order API", "--description", "Takes orders",
 			"--auto-deploy"), stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component create failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration create failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if stub.method != http.MethodPost || stub.path != basePath+"/projects/orders/components" {
 		t.Errorf("the API was called with %s %s", stub.method, stub.path)
@@ -245,13 +245,13 @@ func TestComponentCreateSendsTheBodyTheMCPToolSends(t *testing.T) {
 			t.Errorf("%s = %v, want %v", name, pair[0], pair[1])
 		}
 	}
-	if outcome.Result.Schema != CreatedComponentSchema || field(outcome, "id") != "order-api" {
-		t.Errorf("result = %+v, want the created component", outcome.Result)
+	if outcome.Result.Schema != CreatedIntegrationSchema || field(outcome, "id") != "order-api" {
+		t.Errorf("result = %+v, want the created integration", outcome.Result)
 	}
 	assertEndsWithNext(t, outcome)
 }
 
-func TestComponentCreateMapsEveryTypeAndRuntime(t *testing.T) {
+func TestIntegrationCreateMapsEveryTypeAndRuntime(t *testing.T) {
 	types := map[string]string{
 		"integration-as-api": "deployment/integration-as-api", "automation": "cronjob/scheduled-task",
 		"event-integration": "deployment/event-integration", "file-integration": "deployment/file-integration",
@@ -261,14 +261,14 @@ func TestComponentCreateMapsEveryTypeAndRuntime(t *testing.T) {
 		"wso2-integrator": "ballerina-buildpack-builder", "wso2-integrator-mi": "mi-buildpack-builder",
 		"dockerfile": "dockerfile-builder",
 	}
-	for kind, componentType := range types {
+	for kind, integrationType := range types {
 		for runtime, workflow := range runtimes {
 			stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {status: http.StatusCreated, body: `{"id":"x"}`}})
-			run([]string{"component", "create"}, []string{"x", "--project", "orders", "--type", kind, "--runtime", runtime,
+			run([]string{"integration", "create"}, []string{"x", "--project", "orders", "--type", kind, "--runtime", runtime,
 				"--repo", "https://github.com/acme/x", "--branch", "main"}, stub.endpoint(), &testkit.Access{Token: "t"})
 			spec := decodeBody(t, stub.body)["spec"].(map[string]any)
-			if got := spec["componentType"].(map[string]any)["name"]; got != componentType {
-				t.Errorf("--type %s sent %v, want %s", kind, got, componentType)
+			if got := spec["componentType"].(map[string]any)["name"]; got != integrationType {
+				t.Errorf("--type %s sent %v, want %s", kind, got, integrationType)
 			}
 			if got := spec["workflow"].(map[string]any)["name"]; got != workflow {
 				t.Errorf("--runtime %s sent %v, want %s", runtime, got, workflow)
@@ -279,14 +279,14 @@ func TestComponentCreateMapsEveryTypeAndRuntime(t *testing.T) {
 
 // The platform suffixes a taken name rather than refusing it, so the result
 // reports the ID it actually created and says why it differs.
-func TestComponentCreateReportsASuffixedName(t *testing.T) {
+func TestIntegrationCreateReportsASuffixedName(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {status: http.StatusCreated, body: `{"projectId":"orders","id":"order-api-x7k2","name":"order-api","componentType":"service","buildpackType":"BI",
-		  "warning":"component created, but the first build could not be started"}`}})
+		  "warning":"integration created, but the first build could not be started"}`}})
 
-	outcome := run([]string{"component", "create"}, createArguments(), stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "create"}, createArguments(), stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component create failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration create failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if field(outcome, "id") != "order-api-x7k2" {
 		t.Errorf("id = %q, want the suffixed one", field(outcome, "id"))
@@ -302,7 +302,7 @@ func TestComponentCreateReportsASuffixedName(t *testing.T) {
 	}
 }
 
-func TestComponentCreateRefusesAnIncompleteCommandLine(t *testing.T) {
+func TestIntegrationCreateRefusesAnIncompleteCommandLine(t *testing.T) {
 	base := []string{"--project", "orders", "--type", "automation", "--runtime", "dockerfile",
 		"--repo", "https://github.com/acme/x", "--branch", "main"}
 	without := func(flag string) []string {
@@ -330,9 +330,13 @@ func TestComponentCreateRefusesAnIncompleteCommandLine(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			stub := newPlatformStub(t, nil)
 
-			outcome := run([]string{"component", "create"}, arguments, stub.endpoint(), &testkit.Access{Token: "t"})
+			outcome := run([]string{"integration", "create"}, arguments, stub.endpoint(), &testkit.Access{Token: "t"})
 
-			assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)
+			code := "intg.invalid_argument"
+			if strings.HasPrefix(name, "no ") && name != "no name" && name != "no project" {
+				code = "module.flag_required"
+			}
+			assertProblem(t, outcome, code, problem.CategoryUsage)
 			if stub.calls != 0 || len(outcome.AccessRequests) != 0 {
 				t.Errorf("a refused command line reached the API (%v)", stub.paths)
 			}
@@ -340,13 +344,13 @@ func TestComponentCreateRefusesAnIncompleteCommandLine(t *testing.T) {
 	}
 }
 
-func TestComponentCreateMapsItsOwnRefusals(t *testing.T) {
+func TestIntegrationCreateMapsItsOwnRefusals(t *testing.T) {
 	cases := []struct {
 		name   string
 		status int
 		code   string
 	}{
-		{"every suffixed name taken", http.StatusConflict, "intg.component_exists"},
+		{"every suffixed name taken", http.StatusConflict, "intg.integration_exists"},
 		{"plan limit", http.StatusPaymentRequired, "intg.plan_limit"},
 		{"bad request", http.StatusBadRequest, "intg.call_failed"},
 	}
@@ -354,7 +358,7 @@ func TestComponentCreateMapsItsOwnRefusals(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			stub := newPlatformStub(t, map[string]stubRoute{"POST /projects/orders/components": {status: c.status, body: `{"error":"refused","message":"the platform's words"}`}})
 
-			outcome := run([]string{"component", "create"}, createArguments(), stub.endpoint(), &testkit.Access{Token: "t"})
+			outcome := run([]string{"integration", "create"}, createArguments(), stub.endpoint(), &testkit.Access{Token: "t"})
 
 			assertProblem(t, outcome, c.code, problem.CategoryProductService)
 			if !strings.Contains(outcome.Problem.Message, "the platform's words") {
@@ -364,23 +368,9 @@ func TestComponentCreateMapsItsOwnRefusals(t *testing.T) {
 	}
 }
 
-// --- component delete -----------------------------------------------------
+// --- integration delete -----------------------------------------------------
 
-func TestComponentDeleteWithoutYesCallsNothing(t *testing.T) {
-	stub := newPlatformStub(t, nil)
-
-	outcome := run([]string{"component", "delete"}, []string{"order-api"}, stub.endpoint(), &testkit.Access{Token: "t"})
-
-	assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)
-	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg component delete order-api --yes") {
-		t.Errorf("recovery = %q, want the confirmed command", outcome.Problem.Recovery)
-	}
-	if stub.calls != 0 || len(outcome.AccessRequests) != 0 {
-		t.Errorf("an unconfirmed delete reached the API (%v)", stub.paths)
-	}
-}
-
-func TestComponentDeleteNamesTheProjectOnlyWhenGiven(t *testing.T) {
+func TestIntegrationDeleteNamesTheProjectOnlyWhenGiven(t *testing.T) {
 	for _, c := range []struct {
 		arguments []string
 		query     string
@@ -390,31 +380,31 @@ func TestComponentDeleteNamesTheProjectOnlyWhenGiven(t *testing.T) {
 	} {
 		stub := newPlatformStub(t, map[string]stubRoute{"DELETE /components/order-api": {status: http.StatusNoContent, body: ``}})
 
-		outcome := run([]string{"component", "delete"}, c.arguments, stub.endpoint(), &testkit.Access{Token: "t"})
+		outcome := run([]string{"integration", "delete"}, c.arguments, stub.endpoint(), &testkit.Access{Token: "t"})
 
 		if outcome.Err != nil || outcome.Problem != nil {
-			t.Fatalf("component delete %v failed: %v %v", c.arguments, outcome.Err, outcome.Problem)
+			t.Fatalf("integration delete %v failed: %v %v", c.arguments, outcome.Err, outcome.Problem)
 		}
 		if stub.method != http.MethodDelete || stub.path != basePath+"/components/order-api" || stub.query != c.query {
 			t.Errorf("%v called %s %s?%s, want query %q", c.arguments, stub.method, stub.path, stub.query, c.query)
 		}
-		if outcome.Result.Schema != ComponentRemovalSchema || field(outcome, "component") != "order-api" ||
+		if outcome.Result.Schema != IntegrationRemovalSchema || field(outcome, "integration") != "order-api" ||
 			field(outcome, "state") != "deleting" {
-			t.Errorf("result = %+v, want the component reported as deleting", outcome.Result)
+			t.Errorf("result = %+v, want the integration reported as deleting", outcome.Result)
 		}
 	}
 }
 
-func TestComponentDeleteOfAnUnknownComponentNamesTheListing(t *testing.T) {
+func TestIntegrationDeleteOfAnUnknownIntegrationNamesTheListing(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"DELETE /components/nope": {status: http.StatusNotFound, body: `{"error":"Not Found","message":"component nope not found"}`},
+		"DELETE /components/nope": {status: http.StatusNotFound, body: `{"error":"Not Found","message":"integration nope not found"}`},
 	})
 
-	outcome := run([]string{"component", "delete"}, []string{"nope", "--yes"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "delete"}, []string{"nope", "--yes"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.not_found", problem.CategoryProductService)
-	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg component list") {
-		t.Errorf("recovery = %q, want it to name wso2 intg component list", outcome.Problem.Recovery)
+	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg integration list") {
+		t.Errorf("recovery = %q, want it to name wso2 intg integration list", outcome.Problem.Recovery)
 	}
 }
 

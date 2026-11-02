@@ -34,25 +34,25 @@ import (
 	"github.com/wso2/wso2-cli/sdk/result"
 )
 
-// ComponentsSchema identifies the component listing.
-const ComponentsSchema = "intg.components/v1"
+// IntegrationsSchema identifies the integration listing.
+const IntegrationsSchema = "intg.integrations/v1"
 
-// ComponentSchema identifies one component, as component show reports it.
-const ComponentSchema = "intg.component/v1"
+// IntegrationSchema identifies one integration, as integration show reports it.
+const IntegrationSchema = "intg.integration/v1"
 
-// CreatedComponentSchema identifies what component create reports: the
-// component as created, which can carry a name the platform chose and a
+// CreatedIntegrationSchema identifies what integration create reports: the
+// integration as created, which can carry a name the platform chose and a
 // warning about a step after the create.
-const CreatedComponentSchema = "intg.createdComponent/v1"
+const CreatedIntegrationSchema = "intg.createdIntegration/v1"
 
-// ComponentRemovalSchema identifies an accepted component delete.
-const ComponentRemovalSchema = "intg.componentRemoval/v1"
+// IntegrationRemovalSchema identifies an accepted integration delete.
+const IntegrationRemovalSchema = "intg.integrationRemoval/v1"
 
-// componentTypes maps each --type to the platform component type it creates.
+// integrationTypes maps each --type to the platform integration type it creates.
 // The names and the mapping are the Integration Platform's own, from the
 // create_integration tool of its MCP server, so the CLI, the MCP tools and
 // the console say the same thing.
-var componentTypes = map[string]string{
+var integrationTypes = map[string]string{
 	"integration-as-api": "deployment/integration-as-api",
 	"automation":         "cronjob/scheduled-task",
 	"event-integration":  "deployment/event-integration",
@@ -60,9 +60,9 @@ var componentTypes = map[string]string{
 	"mcp-server":         "deployment/mcp-server",
 }
 
-// componentRuntimes maps each --runtime to the build workflow that builds it,
+// integrationRuntimes maps each --runtime to the build workflow that builds it,
 // from the same tool.
-var componentRuntimes = map[string]string{
+var integrationRuntimes = map[string]string{
 	"wso2-integrator":    "ballerina-buildpack-builder",
 	"wso2-integrator-mi": "mi-buildpack-builder",
 	"dockerfile":         "dockerfile-builder",
@@ -90,13 +90,13 @@ var reportedRuntimes = map[string]string{
 	"other": "other",
 }
 
-// componentName is what the platform accepts as a component's resource name:
+// integrationName is what the platform accepts as an integration's resource name:
 // lowercase letters, digits and hyphens, at most 63 characters.
-var componentName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+var integrationName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-// component is the part of the API's Component this module reports. id is
+// integration is the part of the API's Integration this module reports. id is
 // the resource name every other command takes; name is the display name.
-type component struct {
+type integration struct {
 	Project     string `json:"projectId"`
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -111,14 +111,14 @@ type component struct {
 	Warning     string `json:"warning"`
 }
 
-func (c component) kind() string {
+func (c integration) kind() string {
 	if word, known := reportedTypes[c.Type]; known {
 		return word
 	}
 	return orDash(c.Type)
 }
 
-func (c component) runtime() string {
+func (c integration) runtime() string {
 	if word, known := reportedRuntimes[c.Buildpack]; known {
 		return word
 	}
@@ -128,16 +128,16 @@ func (c component) runtime() string {
 	return orDash(c.Buildpack)
 }
 
-func (c component) state() string {
+func (c integration) state() string {
 	if c.Deleting {
 		return "deleting"
 	}
 	return "active"
 }
 
-// componentRepository is the part of the API's ComponentRepository this
+// integrationRepository is the part of the API's IntegrationRepository this
 // module reports.
-type componentRepository struct {
+type integrationRepository struct {
 	Provider     string `json:"gitProvider"`
 	Organization string `json:"organizationApp"`
 	Name         string `json:"nameApp"`
@@ -146,7 +146,7 @@ type componentRepository struct {
 	URL          string `json:"serverUrl"`
 }
 
-func (r componentRepository) describe() string {
+func (r integrationRepository) describe() string {
 	switch {
 	case r.Name != "" && r.Organization != "":
 		qualified := r.Organization + "/" + r.Name
@@ -161,11 +161,11 @@ func (r componentRepository) describe() string {
 	}
 }
 
-func projectComponentsPath(projectID string) string {
+func projectIntegrationsPath(projectID string) string {
 	return projectPath(projectID) + "/components"
 }
 
-func componentPath(id string) string {
+func integrationPath(id string) string {
 	return "/components/" + url.PathEscape(id)
 }
 
@@ -177,12 +177,12 @@ func withProject(path, projectID string) string {
 	return path + "?" + url.Values{"projectName": {projectID}}.Encode()
 }
 
-// componentListRecovery is where to find a component's ID.
-func componentListRecovery(projectID string) string {
+// integrationListRecovery is where to find an integration's ID.
+func integrationListRecovery(projectID string) string {
 	if projectID == "" {
-		return "Run wso2 intg component list to see the IDs of this organization's components."
+		return "Run wso2 intg integration list to see the IDs of this organization's integrations."
 	}
-	return "Run wso2 intg component list --project " + projectID + " to see the IDs of its components."
+	return "Run wso2 intg integration list --project " + projectID + " to see the IDs of its integrations."
 }
 
 // listProjects reads the organization's projects.
@@ -194,10 +194,10 @@ func listProjects(ctx context.Context, client platform.Client) ([]project, error
 	return listing.Items, err
 }
 
-// componentsOf reads one project's components, or every project's in turn
+// integrationsOf reads one project's integrations, or every project's in turn
 // when projectID is empty. The API lists one project at a time, at most 100
-// components each, with no continuation cursor.
-func componentsOf(ctx context.Context, client platform.Client, projectID, endpoint string) ([]component, error) {
+// integrations each, with no continuation cursor.
+func integrationsOf(ctx context.Context, client platform.Client, projectID, endpoint string) ([]integration, error) {
 	projectIDs := []string{projectID}
 	if projectID == "" {
 		projects, err := listProjects(ctx, client)
@@ -209,13 +209,13 @@ func componentsOf(ctx context.Context, client platform.Client, projectID, endpoi
 			projectIDs = append(projectIDs, p.ID)
 		}
 	}
-	var all []component
+	var all []integration
 	for _, id := range projectIDs {
 		var listing struct {
-			Items []component `json:"items"`
+			Items []integration `json:"items"`
 		}
-		if err := client.Get(ctx, projectComponentsPath(id), &listing); err != nil {
-			return nil, callFailedNaming(err, "list the components of the project "+id, endpoint,
+		if err := client.Get(ctx, projectIntegrationsPath(id), &listing); err != nil {
+			return nil, callFailedNaming(err, "list the integrations of the project "+id, endpoint,
 				projectNotFoundRecovery)
 		}
 		for _, c := range listing.Items {
@@ -228,7 +228,7 @@ func componentsOf(ctx context.Context, client platform.Client, projectID, endpoi
 	return all, nil
 }
 
-// projectFlag is the --project every component command takes.
+// projectFlag is the --project every integration command takes.
 type projectFlag struct {
 	project string
 }
@@ -237,22 +237,22 @@ func (f *projectFlag) bind(command *cobra.Command, usage string) {
 	command.Flags().StringVar(&f.project, "project", "", usage)
 }
 
-// componentList answers "wso2 intg component list [--project <project>]".
-func componentList(command *cobra.Command, flags *projectFlag) module.Handler {
+// integrationList answers "wso2 intg integration list [--project <project>]".
+func integrationList(command *cobra.Command, flags *projectFlag) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		if err := noArguments(command.Flags().Args(), "Run wso2 intg component list [--project <project>]."); err != nil {
+		if err := noArguments(command.Flags().Args(), "Run wso2 intg integration list [--project <project>]."); err != nil {
 			return result.Result{}, err
 		}
 		client, err := clientFor(ctx, request)
 		if err != nil {
 			return result.Result{}, err
 		}
-		found, err := componentsOf(ctx, client, projectOf(flags.project, request), request.Context.Endpoint)
+		found, err := integrationsOf(ctx, client, projectOf(flags.project, request), request.Context.Endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
-		report := result.New(ComponentsSchema).
-			With("count", "Components", strconv.Itoa(len(found))).
+		report := result.New(IntegrationsSchema).
+			With("count", "Integrations", strconv.Itoa(len(found))).
 			WithColumn("name", "Name").
 			WithColumn("id", "ID").
 			WithColumn("project", "Project").
@@ -265,24 +265,24 @@ func componentList(command *cobra.Command, flags *projectFlag) module.Handler {
 			report = report.WithRow(c.Name, c.ID, c.Project, c.kind(), c.runtime(), orDash(c.Status),
 				orDash(c.Updated), c.state())
 		}
-		next := "Run wso2 intg component show <id> to see one component."
+		next := "Run wso2 intg integration show <id> to see one integration."
 		if len(found) == 0 {
-			next = "There are no components yet. Create one with wso2 intg component create <name> --project <project>."
+			next = "There are no integrations yet. Create one with wso2 intg integration create <name> --project <project>."
 		}
 		return report.With(NextField, "Next", next), nil
 	}
 }
 
-// findComponent picks the component ref names out of found: by ID first,
+// findIntegration picks the integration ref names out of found: by ID first,
 // since only IDs are unique, then by display name, refusing a display name
-// that more than one component carries.
-func findComponent(found []component, ref, projectID string) (component, error) {
+// that more than one integration carries.
+func findIntegration(found []integration, ref, projectID string) (integration, error) {
 	for _, c := range found {
 		if c.ID == ref {
 			return c, nil
 		}
 	}
-	var named []component
+	var named []integration
 	for _, c := range found {
 		if c.Name == ref {
 			named = append(named, c)
@@ -296,28 +296,28 @@ func findComponent(found []component, ref, projectID string) (component, error) 
 		if projectID != "" {
 			where = "in the project " + projectID
 		}
-		return component{}, problem.New(problem.CategoryProductService, "intg.not_found",
-			"no component "+where+" has the ID or name "+ref).
-			WithRecovery(componentListRecovery(projectID))
+		return integration{}, problem.New(problem.CategoryProductService, "intg.not_found",
+			"no integration "+where+" has the ID or name "+ref).
+			WithRecovery(integrationListRecovery(projectID))
 	default:
 		ids := make([]string, len(named))
 		for i, c := range named {
 			ids[i] = c.ID
 		}
-		return component{}, usageProblem("more than one component is named "+ref+": "+strings.Join(ids, ", "),
-			"Name the component by its ID instead.")
+		return integration{}, usageProblem("more than one integration is named "+ref+": "+strings.Join(ids, ", "),
+			"Name the integration by its ID instead.")
 	}
 }
 
-// componentShow answers "wso2 intg component show <component> [--project <project>]".
+// integrationShow answers "wso2 intg integration show <integration> [--project <project>]".
 //
-// The API has no read of one component, so the component is found in its
+// The API has no read of one integration, so the integration is found in its
 // project's listing, or in every project's when none is named, and its
 // repository is read beside it.
-func componentShow(command *cobra.Command, flags *projectFlag) module.Handler {
+func integrationShow(command *cobra.Command, flags *projectFlag) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		ref, err := exactlyOneArgument(command.Flags().Args(), "name the component to show",
-			"Run wso2 intg component show <component> [--project <project>].")
+		ref, err := exactlyOneArgument(command.Flags().Args(), "name the integration to show",
+			"Run wso2 intg integration show <integration> [--project <project>].")
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -325,25 +325,25 @@ func componentShow(command *cobra.Command, flags *projectFlag) module.Handler {
 		if err != nil {
 			return result.Result{}, err
 		}
-		found, err := componentsOf(ctx, client, projectOf(flags.project, request), request.Context.Endpoint)
+		found, err := integrationsOf(ctx, client, projectOf(flags.project, request), request.Context.Endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
-		c, err := findComponent(found, ref, projectOf(flags.project, request))
+		c, err := findIntegration(found, ref, projectOf(flags.project, request))
 		if err != nil {
 			return result.Result{}, err
 		}
-		var repository componentRepository
-		if err := client.Get(ctx, withProject(componentPath(c.ID)+"/repository", c.Project), &repository); err != nil {
-			return result.Result{}, callFailedNaming(err, "read the repository of the component "+c.ID,
-				request.Context.Endpoint, componentListRecovery(c.Project))
+		var repository integrationRepository
+		if err := client.Get(ctx, withProject(integrationPath(c.ID)+"/repository", c.Project), &repository); err != nil {
+			return result.Result{}, callFailedNaming(err, "read the repository of the integration "+c.ID,
+				request.Context.Endpoint, integrationListRecovery(c.Project))
 		}
-		next := "Run wso2 intg component list --project " + c.Project + " to see the other components in its project."
+		next := "Run wso2 intg integration list --project " + c.Project + " to see the other integrations in its project."
 		if c.Deleting {
-			next = "The component is being deleted. Run wso2 intg component list --project " + c.Project +
+			next = "The integration is being deleted. Run wso2 intg integration list --project " + c.Project +
 				" until it no longer appears."
 		}
-		return result.New(ComponentSchema).
+		return result.New(IntegrationSchema).
 			With("id", "ID", c.ID).
 			With("name", "Name", c.Name).
 			With("project", "Project", c.Project).
@@ -361,8 +361,8 @@ func componentShow(command *cobra.Command, flags *projectFlag) module.Handler {
 	}
 }
 
-// componentCreateFlags are the options of "wso2 intg component create".
-type componentCreateFlags struct {
+// integrationCreateFlags are the options of "wso2 intg integration create".
+type integrationCreateFlags struct {
 	project     string
 	kind        string
 	runtime     string
@@ -374,32 +374,31 @@ type componentCreateFlags struct {
 	autoDeploy  bool
 }
 
-func (f *componentCreateFlags) bind(command *cobra.Command) {
+func (f *integrationCreateFlags) bind(command *cobra.Command) {
 	flags := command.Flags()
 	flags.StringVar(&f.project, "project", "", "The project to create it in. Defaults to the context's project; "+
 		"required when the context names none.")
-	flags.StringVar(&f.kind, "type", "", "What it is: "+strings.Join(slices.Sorted(maps.Keys(componentTypes)), ", ")+
-		". Required.")
+	flags.StringVar(&f.kind, "type", "", "What it is: "+strings.Join(slices.Sorted(maps.Keys(integrationTypes)), ", ")+".")
 	flags.StringVar(&f.runtime, "runtime", "", "What its source is built with: "+
-		strings.Join(slices.Sorted(maps.Keys(componentRuntimes)), ", ")+". Required.")
-	flags.StringVar(&f.repo, "repo", "", "The https clone URL of a public git repository. Required.")
-	flags.StringVar(&f.branch, "branch", "", "The branch to build. Required.")
+		strings.Join(slices.Sorted(maps.Keys(integrationRuntimes)), ", ")+".")
+	flags.StringVar(&f.repo, "repo", "", "The https clone URL of a public git repository.")
+	flags.StringVar(&f.branch, "branch", "", "The branch to build.")
 	flags.StringVar(&f.path, "path", "", "The directory of the integration within the repository. "+
 		"Defaults to the repository root.")
-	flags.StringVar(&f.displayName, "display-name", "", "The name people see. Defaults to the component's name.")
-	flags.StringVar(&f.description, "description", "", "What the component does.")
+	flags.StringVar(&f.displayName, "display-name", "", "The name people see. Defaults to the integration's name.")
+	flags.StringVar(&f.description, "description", "", "What the integration does.")
 	flags.BoolVar(&f.autoDeploy, "auto-deploy", false, "Deploy to the first environment after every successful build.")
 }
 
 // createRequest builds the platform-shaped body the API forwards upstream,
 // exactly as the platform's own create_integration tool does. autoBuild is
-// always set: it starts the first build, without which a new component has
+// always set: it starts the first build, without which a new integration has
 // nothing to deploy.
-func (f *componentCreateFlags) createRequest(name, project string) (map[string]any, error) {
-	recovery := "Run wso2 intg component create <name> --project <project> --type <type> --runtime <runtime> " +
+func (f *integrationCreateFlags) createRequest(name, project string) (map[string]any, error) {
+	recovery := "Run wso2 intg integration create <name> --project <project> --type <type> --runtime <runtime> " +
 		"--repo <url> --branch <branch>."
-	if !componentName.MatchString(name) {
-		return nil, usageProblem("the component name "+name+" is not one the platform accepts: use lowercase "+
+	if !integrationName.MatchString(name) {
+		return nil, usageProblem("the integration name "+name+" is not one the platform accepts: use lowercase "+
 			"letters, digits and hyphens, at most 63 characters", recovery)
 	}
 	// In a fixed order, so the same command line always names the same flag.
@@ -415,15 +414,15 @@ func (f *componentCreateFlags) createRequest(name, project string) (map[string]a
 			return nil, usageProblem(required.flag+" is required", recovery)
 		}
 	}
-	componentType, known := componentTypes[f.kind]
+	integrationType, known := integrationTypes[f.kind]
 	if !known {
-		return nil, usageProblem("--type "+f.kind+" is not a component type", "Use one of "+
-			strings.Join(slices.Sorted(maps.Keys(componentTypes)), ", ")+".")
+		return nil, usageProblem("--type "+f.kind+" is not an integration type", "Use one of "+
+			strings.Join(slices.Sorted(maps.Keys(integrationTypes)), ", ")+".")
 	}
-	workflow, known := componentRuntimes[f.runtime]
+	workflow, known := integrationRuntimes[f.runtime]
 	if !known {
 		return nil, usageProblem("--runtime "+f.runtime+" is not a runtime", "Use one of "+
-			strings.Join(slices.Sorted(maps.Keys(componentRuntimes)), ", ")+".")
+			strings.Join(slices.Sorted(maps.Keys(integrationRuntimes)), ", ")+".")
 	}
 	if !strings.HasPrefix(f.repo, "https://") {
 		return nil, usageProblem("--repo "+f.repo+" is not an https clone URL",
@@ -444,7 +443,7 @@ func (f *componentCreateFlags) createRequest(name, project string) (map[string]a
 		"metadata": map[string]any{"name": name, "annotations": annotations},
 		"spec": map[string]any{
 			"owner":         map[string]string{"projectName": project},
-			"componentType": map[string]string{"name": componentType},
+			"componentType": map[string]string{"name": integrationType},
 			"autoBuild":     true,
 			"autoDeploy":    f.autoDeploy,
 			"workflow": map[string]any{
@@ -456,11 +455,11 @@ func (f *componentCreateFlags) createRequest(name, project string) (map[string]a
 	}, nil
 }
 
-// componentCreate answers "wso2 intg component create <name> ...".
-func componentCreate(command *cobra.Command, flags *componentCreateFlags) module.Handler {
+// integrationCreate answers "wso2 intg integration create <name> ...".
+func integrationCreate(command *cobra.Command, flags *integrationCreateFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		name, err := exactlyOneArgument(command.Flags().Args(), "name the component to create",
-			"Run wso2 intg component create <name> --project <project> --type <type> --runtime <runtime> "+
+		name, err := exactlyOneArgument(command.Flags().Args(), "name the integration to create",
+			"Run wso2 intg integration create <name> --project <project> --type <type> --runtime <runtime> "+
 				"--repo <url> --branch <branch>.")
 		if err != nil {
 			return result.Result{}, err
@@ -474,9 +473,9 @@ func componentCreate(command *cobra.Command, flags *componentCreateFlags) module
 		if err != nil {
 			return result.Result{}, err
 		}
-		var created component
-		if err := client.Post(ctx, projectComponentsPath(project), body, &created); err != nil {
-			return result.Result{}, componentCreateFailed(err, name, request.Context.Endpoint)
+		var created integration
+		if err := client.Post(ctx, projectIntegrationsPath(project), body, &created); err != nil {
+			return result.Result{}, integrationCreateFailed(err, name, request.Context.Endpoint)
 		}
 		if created.ID == "" {
 			created.ID = name
@@ -484,14 +483,14 @@ func componentCreate(command *cobra.Command, flags *componentCreateFlags) module
 		if created.Project == "" {
 			created.Project = project
 		}
-		// Component names are unique across the organization, and the
+		// Integration names are unique across the organization, and the
 		// platform suffixes a taken one rather than refusing it.
-		next := "Its first build has started. Run wso2 intg component show " + created.ID + " --project " +
+		next := "Its first build has started. Run wso2 intg integration show " + created.ID + " --project " +
 			created.Project + " to follow it."
 		if created.ID != name {
 			next = "The platform created it as " + created.ID + " because " + name + " was taken. " + next
 		}
-		return result.New(CreatedComponentSchema).
+		return result.New(CreatedIntegrationSchema).
 			With("id", "ID", created.ID).
 			With("name", "Name", orDash(created.Name)).
 			With("project", "Project", created.Project).
@@ -502,56 +501,57 @@ func componentCreate(command *cobra.Command, flags *componentCreateFlags) module
 	}
 }
 
-// componentCreateFailed maps the refusals that mean something particular for a
+// integrationCreateFailed maps the refusals that mean something particular for a
 // create, and hands every other one to callFailed.
-func componentCreateFailed(err error, name, endpoint string) error {
+func integrationCreateFailed(err error, name, endpoint string) error {
 	if refused, ok := refusal(err, http.StatusConflict); ok {
-		return problem.New(problem.CategoryProductService, "intg.component_exists",
-			"the platform could not find a free name for the component "+name+": "+refusalWords(refused)).
-			WithRecovery("Choose another name and run wso2 intg component create again.")
+		return problem.New(problem.CategoryProductService, "intg.integration_exists",
+			"the platform could not find a free name for the integration "+name+": "+refusalWords(refused)).
+			WithRecovery("Choose another name and run wso2 intg integration create again.")
 	}
 	if refused, ok := refusal(err, http.StatusBadRequest); ok {
 		return problem.New(problem.CategoryProductService, "intg.call_failed",
-			"the Integration Platform refused to create the component "+name+": "+refusalWords(refused)).
-			WithRecovery("Check the values given on the command line, then run wso2 intg component create again.")
+			"the Integration Platform refused to create the integration "+name+": "+refusalWords(refused)).
+			WithRecovery("Check the values given on the command line, then run wso2 intg integration create again.")
 	}
-	return callFailed(err, "create the component "+name, endpoint)
+	return callFailed(err, "create the integration "+name, endpoint)
 }
 
-// componentDeleteFlags are the options of "wso2 intg component delete".
-type componentDeleteFlags struct {
+// integrationDeleteFlags are the options of "wso2 intg integration delete".
+type integrationDeleteFlags struct {
 	projectFlag
 	removalFlags
 }
 
-// componentDelete answers "wso2 intg component delete <component> --yes".
+// integrationDelete answers "wso2 intg integration delete <integration>",
+// asking first unless --yes is given.
 //
-// The project is optional: the API resolves it from the component, whose
+// The project is optional: the API resolves it from the integration, whose
 // name is unique across the organization.
-func componentDelete(command *cobra.Command, flags *componentDeleteFlags) module.Handler {
+func integrationDelete(command *cobra.Command, flags *integrationDeleteFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		id, err := exactlyOneArgument(command.Flags().Args(), "name the component to delete",
-			"Run wso2 intg component delete <component> --yes.")
+		id, err := exactlyOneArgument(command.Flags().Args(), "name the integration to delete",
+			"Run wso2 intg integration delete <integration>.")
 		if err != nil {
 			return result.Result{}, err
 		}
-		if !flags.yes {
-			return result.Result{}, usageProblem("deleting the component "+id+" is not confirmed",
-				"Run wso2 intg component delete "+id+" --yes to delete it.")
+		if err := confirmRemoval(ctx, request, &flags.removalFlags, "Delete the integration "+id+
+			", its builds and its deployments? This cannot be undone."); err != nil {
+			return result.Result{}, err
 		}
 		client, err := clientFor(ctx, request)
 		if err != nil {
 			return result.Result{}, err
 		}
 		project := projectOf(flags.project, request)
-		if err := client.Delete(ctx, withProject(componentPath(id), project)); err != nil {
-			return result.Result{}, callFailedNaming(err, "delete the component "+id, request.Context.Endpoint,
-				componentListRecovery(project))
+		if err := client.Delete(ctx, withProject(integrationPath(id), project)); err != nil {
+			return result.Result{}, callFailedNaming(err, "delete the integration "+id, request.Context.Endpoint,
+				integrationListRecovery(project))
 		}
-		return result.New(ComponentRemovalSchema).
-			With("component", "Component", id).
+		return result.New(IntegrationRemovalSchema).
+			With("integration", "Integration", id).
 			With("state", "State", "deleting").
-			With(NextField, "Next", "Deletion continues in the background. Run wso2 intg component list "+
-				"until the component no longer appears."), nil
+			With(NextField, "Next", "Deletion continues in the background. Run wso2 intg integration list "+
+				"until the integration no longer appears."), nil
 	}
 }

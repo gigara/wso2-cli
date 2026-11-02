@@ -34,10 +34,10 @@ import (
 // EnvironmentsSchema identifies the environment listing.
 const EnvironmentsSchema = "intg.environments/v1"
 
-// DeploymentsSchema identifies a component's deployment in every environment.
+// DeploymentsSchema identifies an integration's deployment in every environment.
 const DeploymentsSchema = "intg.deployments/v1"
 
-// DeploymentSchema identifies a component's deployment in one environment.
+// DeploymentSchema identifies an integration's deployment in one environment.
 const DeploymentSchema = "intg.deployment/v1"
 
 // DeploySchema identifies an accepted deploy.
@@ -52,7 +52,7 @@ const StopSchema = "intg.stop/v1"
 // RedeploySchema identifies an accepted redeploy.
 const RedeploySchema = "intg.redeploy/v1"
 
-// notDeployed is the status of an environment a component has no deployment in.
+// notDeployed is the status of an environment an integration has no deployment in.
 const notDeployed = "not deployed"
 
 // environment is the part of the API's Environment this module reports. id is
@@ -64,7 +64,7 @@ type environment struct {
 	DataPlane  string `json:"dpId"`
 }
 
-// deployment is the part of the API's ComponentDeployment this module
+// deployment is the part of the API's IntegrationDeployment this module
 // reports. The API answers an environment with no deployment with an empty
 // body, which leaves it zero.
 type deployment struct {
@@ -153,28 +153,28 @@ func resolveEnvironment(environments []environment, ref, flag string) (environme
 		"Use one of "+strings.Join(ids, ", ")+".")
 }
 
-// currentDeployment reads what componentID runs in environmentID.
-func currentDeployment(ctx context.Context, client platform.Client, componentID, environmentID, endpoint string) (deployment, error) {
+// currentDeployment reads what integrationID runs in environmentID.
+func currentDeployment(ctx context.Context, client platform.Client, integrationID, environmentID, endpoint string) (deployment, error) {
 	var found deployment
-	path := componentPath(componentID) + "/deployments?" + url.Values{"environmentId": {environmentID}}.Encode()
+	path := integrationPath(integrationID) + "/deployments?" + url.Values{"environmentId": {environmentID}}.Encode()
 	if err := client.Get(ctx, path, &found); err != nil {
-		return deployment{}, callFailedNaming(err, "read the deployment of "+componentID+" in "+environmentID,
-			endpoint, componentListRecovery(""))
+		return deployment{}, callFailedNaming(err, "read the deployment of "+integrationID+" in "+environmentID,
+			endpoint, integrationListRecovery(""))
 	}
 	return found, nil
 }
 
-// componentProject is the project componentID is in: the one --project names,
-// or the one the component listing reports when none is given.
-func componentProject(ctx context.Context, client platform.Client, componentID, project, endpoint string) (string, error) {
+// integrationProject is the project integrationID is in: the one --project names,
+// or the one the integration listing reports when none is given.
+func integrationProject(ctx context.Context, client platform.Client, integrationID, project, endpoint string) (string, error) {
 	if project != "" {
 		return project, nil
 	}
-	found, err := componentsOf(ctx, client, "", endpoint)
+	found, err := integrationsOf(ctx, client, "", endpoint)
 	if err != nil {
 		return "", err
 	}
-	c, err := findComponent(found, componentID, "")
+	c, err := findIntegration(found, integrationID, "")
 	if err != nil {
 		return "", err
 	}
@@ -258,16 +258,16 @@ func environmentList(command *cobra.Command) module.Handler {
 			}
 			report = report.WithRow(e.ID, e.Name, production, orDash(e.DataPlane))
 		}
-		return report.With(NextField, "Next", "Run wso2 intg deployment list <component> to see what runs in each."), nil
+		return report.With(NextField, "Next", "Run wso2 intg integration deployment list <integration> to see what runs in each."), nil
 	}
 }
 
-// deploymentList answers "wso2 intg deployment list <component>": what the
-// component runs in every environment, one read per environment.
+// deploymentList answers "wso2 intg integration deployment list <integration>": what the
+// integration runs in every environment, one read per environment.
 func deploymentList(command *cobra.Command) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		componentID, err := exactlyOneArgument(command.Flags().Args(), "name the component whose deployments to list",
-			"Run wso2 intg deployment list <component>.")
+		integrationID, err := exactlyOneArgument(command.Flags().Args(), "name the integration whose deployments to list",
+			"Run wso2 intg integration deployment list <integration>.")
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -280,7 +280,7 @@ func deploymentList(command *cobra.Command) module.Handler {
 			return result.Result{}, err
 		}
 		report := result.New(DeploymentsSchema).
-			With("component", "Component", componentID).
+			With("integration", "Integration", integrationID).
 			WithColumn("environment", "Environment").
 			WithColumn("status", "Status").
 			WithColumn("release", "Release").
@@ -288,13 +288,13 @@ func deploymentList(command *cobra.Command) module.Handler {
 			WithColumn("commit", "Commit").
 			WithColumn("deployed", "Deployed")
 		for _, e := range environments {
-			d, err := currentDeployment(ctx, client, componentID, e.ID, request.Context.Endpoint)
+			d, err := currentDeployment(ctx, client, integrationID, e.ID, request.Context.Endpoint)
 			if err != nil {
 				return result.Result{}, err
 			}
 			report = report.WithRow(e.ID, d.status(), orDash(d.Release), d.buildName(), d.commit(), d.deployedAt())
 		}
-		return report.With(NextField, "Next", "Run wso2 intg deployment show "+componentID+
+		return report.With(NextField, "Next", "Run wso2 intg integration deployment show "+integrationID+
 			" --env <environment> to see one environment."), nil
 	}
 }
@@ -304,11 +304,11 @@ type environmentFlag struct {
 	env string
 }
 
-// deploymentShow answers "wso2 intg deployment show <component> --env <environment>".
+// deploymentShow answers "wso2 intg integration deployment show <integration> --env <environment>".
 func deploymentShow(command *cobra.Command, flags *environmentFlag) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		recovery := "Run wso2 intg deployment show <component> --env <environment>."
-		componentID, err := exactlyOneArgument(command.Flags().Args(), "name the component whose deployment to show",
+		recovery := "Run wso2 intg integration deployment show <integration> --env <environment>."
+		integrationID, err := exactlyOneArgument(command.Flags().Args(), "name the integration whose deployment to show",
 			recovery)
 		if err != nil {
 			return result.Result{}, err
@@ -328,18 +328,18 @@ func deploymentShow(command *cobra.Command, flags *environmentFlag) module.Handl
 		if err != nil {
 			return result.Result{}, err
 		}
-		d, err := currentDeployment(ctx, client, componentID, env.ID, request.Context.Endpoint)
+		d, err := currentDeployment(ctx, client, integrationID, env.ID, request.Context.Endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
-		next := "Run wso2 intg deployment list " + componentID + " to see every environment."
+		next := "Run wso2 intg integration deployment list " + integrationID + " to see every environment."
 		if !d.deployed() {
-			next = "Nothing is deployed there. Run wso2 intg component deploy " + componentID + " --env " + env.ID +
-				" if the project's pipeline starts there, or wso2 intg component promote " + componentID +
+			next = "Nothing is deployed there. Run wso2 intg integration deploy " + integrationID + " --env " + env.ID +
+				" if the project's pipeline starts there, or wso2 intg integration promote " + integrationID +
 				" --from <environment> --to " + env.ID + "."
 		}
 		return result.New(DeploymentSchema).
-			With("component", "Component", componentID).
+			With("integration", "Integration", integrationID).
 			With("environment", "Environment", env.ID).
 			With("status", "Status", d.status()).
 			With("release", "Release", orDash(d.Release)).
@@ -351,23 +351,23 @@ func deploymentShow(command *cobra.Command, flags *environmentFlag) module.Handl
 	}
 }
 
-// componentDeployFlags are the options of "wso2 intg component deploy".
-type componentDeployFlags struct {
+// integrationDeployFlags are the options of "wso2 intg integration deploy".
+type integrationDeployFlags struct {
 	env     string
 	build   string
 	project string
 	waitFlags
 }
 
-// componentDeploy answers "wso2 intg component deploy <component> --env <environment>".
+// integrationDeploy answers "wso2 intg integration deploy <integration> --env <environment>".
 //
 // A deploy goes where the project's deployment pipeline starts, as the console
 // does; later environments are reached by promotion, which is what the
 // pipeline exists to enforce. The API itself accepts any environment.
-func componentDeploy(command *cobra.Command, flags *componentDeployFlags) module.Handler {
+func integrationDeploy(command *cobra.Command, flags *integrationDeployFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		recovery := "Run wso2 intg component deploy <component> --env <environment> [--build <build>]."
-		componentID, err := exactlyOneArgument(command.Flags().Args(), "name the component to deploy", recovery)
+		recovery := "Run wso2 intg integration deploy <integration> --env <environment> [--build <build>]."
+		integrationID, err := exactlyOneArgument(command.Flags().Args(), "name the integration to deploy", recovery)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -390,7 +390,7 @@ func componentDeploy(command *cobra.Command, flags *componentDeployFlags) module
 		if err != nil {
 			return result.Result{}, err
 		}
-		project, err := componentProject(ctx, client, componentID, projectOf(flags.project, request), endpoint)
+		project, err := integrationProject(ctx, client, integrationID, projectOf(flags.project, request), endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -401,48 +401,48 @@ func componentDeploy(command *cobra.Command, flags *componentDeployFlags) module
 		if entry != "" && entry != env.ID {
 			return result.Result{}, problem.New(problem.CategoryUsage, "intg.not_pipeline_entry",
 				"the project "+project+"'s deployment pipeline starts at "+entry+", not "+env.ID).
-				WithRecovery("Run wso2 intg component deploy " + componentID + " --env " + entry +
-					", then wso2 intg component promote " + componentID + " --from " + entry + " --to " + env.ID + ".")
+				WithRecovery("Run wso2 intg integration deploy " + integrationID + " --env " + entry +
+					", then wso2 intg integration promote " + integrationID + " --from " + entry + " --to " + env.ID + ".")
 		}
 		built := "current image"
 		if flags.build != "" {
 			// The API falls back to the current image when a build cannot be
 			// resolved and still reports success, so the build is checked here.
 			var b build
-			if err := client.Get(ctx, buildPath(componentID, flags.build), &b); err != nil {
-				return result.Result{}, buildReadFailed(err, "read the build "+flags.build+" of "+componentID,
-					endpoint, componentID)
+			if err := client.Get(ctx, buildPath(integrationID, flags.build), &b); err != nil {
+				return result.Result{}, buildReadFailed(err, "read the build "+flags.build+" of "+integrationID,
+					endpoint, integrationID)
 			}
 			if b.Status != "Succeeded" || b.Image == "" {
 				return result.Result{}, problem.New(problem.CategoryUsage, "intg.build_not_deployable",
 					"the build "+flags.build+" is "+orDash(b.Status)+" and has no image to deploy").
-					WithRecovery("Deploy a build that succeeded: " + buildListRecovery(componentID))
+					WithRecovery("Deploy a build that succeeded: " + buildListRecovery(integrationID))
 			}
 			built = flags.build
 		}
 		var accepted struct {
 			Message string `json:"message"`
 		}
-		path := withProject(componentPath(componentID)+"/deployments", project)
+		path := withProject(integrationPath(integrationID)+"/deployments", project)
 		// Schedule fields are left out so an automation keeps its schedule:
 		// the API leaves omitted release-binding fields untouched.
 		body := map[string]string{"environmentId": env.ID, "imageId": flags.build}
 		if err := client.Post(ctx, path, body, &accepted); err != nil {
-			return result.Result{}, callFailedNaming(err, "deploy "+componentID+" to "+env.ID, endpoint,
-				componentListRecovery(project))
+			return result.Result{}, callFailedNaming(err, "deploy "+integrationID+" to "+env.ID, endpoint,
+				integrationListRecovery(project))
 		}
-		release, status, next := accepted.Message, "requested", "Run wso2 intg deployment show "+componentID+
+		release, status, next := accepted.Message, "requested", "Run wso2 intg integration deployment show "+integrationID+
 			" --env "+env.ID+" to see it start."
 		if flags.wait {
-			running, err := waitForRollout(ctx, client, componentID, env.ID, release, flags.timeout, endpoint)
+			running, err := waitForRollout(ctx, client, integrationID, env.ID, release, flags.timeout, endpoint)
 			if err != nil {
 				return result.Result{}, err
 			}
 			release, status = running.Release, running.Status
-			next = "Run wso2 intg component logs " + componentID + " --env " + env.ID + " to see what it does."
+			next = "Run wso2 intg integration logs " + integrationID + " --env " + env.ID + " to see what it does."
 		}
 		return result.New(DeploySchema).
-			With("component", "Component", componentID).
+			With("integration", "Integration", integrationID).
 			With("environment", "Environment", env.ID).
 			With("build", "Build", built).
 			With("release", "Release", orDash(release)).
@@ -451,22 +451,22 @@ func componentDeploy(command *cobra.Command, flags *componentDeployFlags) module
 	}
 }
 
-// componentPromoteFlags are the options of "wso2 intg component promote".
-type componentPromoteFlags struct {
+// integrationPromoteFlags are the options of "wso2 intg integration promote".
+type integrationPromoteFlags struct {
 	from    string
 	to      string
 	project string
 	waitFlags
 }
 
-// componentPromote answers "wso2 intg component promote <component> --from <environment> --to <environment>".
+// integrationPromote answers "wso2 intg integration promote <integration> --from <environment> --to <environment>".
 //
 // The API wants the source release and the pipeline by ID; both are looked up
 // here so a user deals only in names.
-func componentPromote(command *cobra.Command, flags *componentPromoteFlags) module.Handler {
+func integrationPromote(command *cobra.Command, flags *integrationPromoteFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		recovery := "Run wso2 intg component promote <component> --from <environment> --to <environment>."
-		componentID, err := exactlyOneArgument(command.Flags().Args(), "name the component to promote", recovery)
+		recovery := "Run wso2 intg integration promote <integration> --from <environment> --to <environment>."
+		integrationID, err := exactlyOneArgument(command.Flags().Args(), "name the integration to promote", recovery)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -499,18 +499,18 @@ func componentPromote(command *cobra.Command, flags *componentPromoteFlags) modu
 		if from.ID == to.ID {
 			return result.Result{}, usageProblem("--from and --to both name "+from.ID, recovery)
 		}
-		project, err := componentProject(ctx, client, componentID, projectOf(flags.project, request), endpoint)
+		project, err := integrationProject(ctx, client, integrationID, projectOf(flags.project, request), endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
-		source, err := currentDeployment(ctx, client, componentID, from.ID, endpoint)
+		source, err := currentDeployment(ctx, client, integrationID, from.ID, endpoint)
 		if err != nil {
 			return result.Result{}, err
 		}
 		if !source.deployed() {
 			return result.Result{}, problem.New(problem.CategoryProductService, "intg.not_deployed",
-				componentID+" has nothing deployed in "+from.ID+" to promote").
-				WithRecovery("Run wso2 intg deployment list " + componentID + " to see where it runs.")
+				integrationID+" has nothing deployed in "+from.ID+" to promote").
+				WithRecovery("Run wso2 intg integration deployment list " + integrationID + " to see where it runs.")
 		}
 		pipelineID, _, err := pipelineOf(ctx, client, project, endpoint)
 		if err != nil {
@@ -519,7 +519,7 @@ func componentPromote(command *cobra.Command, flags *componentPromoteFlags) modu
 		if pipelineID == "" {
 			return result.Result{}, problem.New(problem.CategoryProductService, "intg.no_pipeline",
 				"the project "+project+" has no deployment pipeline to promote along").
-				WithRecovery("Deploy to " + to.ID + " directly with wso2 intg component deploy " + componentID +
+				WithRecovery("Deploy to " + to.ID + " directly with wso2 intg integration deploy " + integrationID +
 					" --env " + to.ID + ".")
 		}
 		var accepted struct {
@@ -531,35 +531,35 @@ func componentPromote(command *cobra.Command, flags *componentPromoteFlags) modu
 			"targetEnvironmentId":  to.ID,
 			"deploymentPipelineId": pipelineID,
 		}
-		path := withProject(componentPath(componentID)+"/deployments/promote", project)
+		path := withProject(integrationPath(integrationID)+"/deployments/promote", project)
 		if err := client.Post(ctx, path, body, &accepted); err != nil {
 			// The API answers a hop the pipeline does not allow with a 403,
 			// which here is a pipeline rule rather than a missing permission.
 			if refused, ok := refusal(err, http.StatusForbidden); ok {
 				return result.Result{}, problem.New(problem.CategoryProductService, "intg.promotion_refused",
-					"the Integration Platform refused to promote "+componentID+" from "+from.ID+" to "+to.ID+": "+
+					"the Integration Platform refused to promote "+integrationID+" from "+from.ID+" to "+to.ID+": "+
 						refusalWords(refused)).
 					WithRecovery("Check that the project " + project + "'s deployment pipeline promotes " + from.ID +
 						" to " + to.ID + ", and that you may promote there.")
 			}
-			return result.Result{}, callFailedNaming(err, "promote "+componentID+" from "+from.ID+" to "+to.ID,
-				endpoint, componentListRecovery(project))
+			return result.Result{}, callFailedNaming(err, "promote "+integrationID+" from "+from.ID+" to "+to.ID,
+				endpoint, integrationListRecovery(project))
 		}
 		release := accepted.Message
 		if release == "" {
 			release = source.Release
 		}
-		status, next := "requested", "Run wso2 intg deployment show "+componentID+" --env "+to.ID+" to see it start."
+		status, next := "requested", "Run wso2 intg integration deployment show "+integrationID+" --env "+to.ID+" to see it start."
 		if flags.wait {
-			running, err := waitForRollout(ctx, client, componentID, to.ID, release, flags.timeout, endpoint)
+			running, err := waitForRollout(ctx, client, integrationID, to.ID, release, flags.timeout, endpoint)
 			if err != nil {
 				return result.Result{}, err
 			}
 			status = running.Status
-			next = "Run wso2 intg component logs " + componentID + " --env " + to.ID + " to see what it does."
+			next = "Run wso2 intg integration logs " + integrationID + " --env " + to.ID + " to see what it does."
 		}
 		return result.New(PromotionSchema).
-			With("component", "Component", componentID).
+			With("integration", "Integration", integrationID).
 			With("from", "From", from.ID).
 			With("to", "To", to.ID).
 			With("release", "Release", release).
@@ -572,8 +572,8 @@ func componentPromote(command *cobra.Command, flags *componentPromoteFlags) modu
 // the command line, the access, and the environment --env names.
 func resolvedEnvironment(ctx context.Context, command *cobra.Command, request module.Request, flags *environmentFlag,
 	verb string) (string, platform.Client, environment, error) {
-	recovery := "Run wso2 intg component " + verb + " <component> --env <environment>."
-	componentID, err := exactlyOneArgument(command.Flags().Args(), "name the component to "+verb, recovery)
+	recovery := "Run wso2 intg integration " + verb + " <integration> --env <environment>."
+	integrationID, err := exactlyOneArgument(command.Flags().Args(), "name the integration to "+verb, recovery)
 	if err != nil {
 		return "", platform.Client{}, environment{}, err
 	}
@@ -589,59 +589,83 @@ func resolvedEnvironment(ctx context.Context, command *cobra.Command, request mo
 		return "", platform.Client{}, environment{}, err
 	}
 	env, err := resolveEnvironment(environments, flags.env, "--env")
-	return componentID, client, env, err
+	return integrationID, client, env, err
 }
 
-// componentStop answers "wso2 intg component stop <component> --env <environment>".
+// integrationStop answers "wso2 intg integration stop <integration> --env <environment>".
 //
-// The component no longer runs there, but its deployment is kept, so a
+// The integration no longer runs there, but its deployment is kept, so a
 // redeploy starts it again.
-func componentStop(command *cobra.Command, flags *environmentFlag) module.Handler {
+func integrationStop(command *cobra.Command, flags *environmentFlag) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		componentID, client, env, err := resolvedEnvironment(ctx, command, request, flags, "stop")
+		integrationID, client, env, err := resolvedEnvironment(ctx, command, request, flags, "stop")
 		if err != nil {
 			return result.Result{}, err
 		}
 		var accepted struct {
 			Message string `json:"message"`
 		}
-		path := componentPath(componentID) + "/deployments/stop"
+		path := integrationPath(integrationID) + "/deployments/stop"
 		if err := client.Put(ctx, path, map[string]string{"environment": env.ID}, &accepted); err != nil {
-			return result.Result{}, callFailedNaming(err, "stop "+componentID+" in "+env.ID, request.Context.Endpoint,
-				"Run wso2 intg deployment list "+componentID+" to see where it is deployed.")
+			return result.Result{}, callFailedNaming(err, "stop "+integrationID+" in "+env.ID, request.Context.Endpoint,
+				"Run wso2 intg integration deployment list "+integrationID+" to see where it is deployed.")
 		}
 		return result.New(StopSchema).
-			With("component", "Component", componentID).
+			With("integration", "Integration", integrationID).
 			With("environment", "Environment", env.ID).
 			With("state", "State", "stopped").
-			With(NextField, "Next", "Run wso2 intg component redeploy "+componentID+" --env "+env.ID+
+			With(NextField, "Next", "Run wso2 intg integration redeploy "+integrationID+" --env "+env.ID+
 				" to start it again."), nil
 	}
 }
 
-// componentRedeploy answers "wso2 intg component redeploy <component> --env <environment>".
+// integrationRedeployFlags are the options of "wso2 intg integration redeploy".
+type integrationRedeployFlags struct {
+	environmentFlag
+	waitFlags
+}
+
+// integrationRedeploy answers "wso2 intg integration redeploy <integration> --env <environment>".
 //
 // The release already deployed there is kept, started again if it was
-// stopped, and its replicas restarted one by one.
-func componentRedeploy(command *cobra.Command, flags *environmentFlag) module.Handler {
+// stopped, and its replicas restarted one by one. With --wait it follows the
+// release until it is active again, which is what tells a start after a stop
+// apart from a request that was only accepted.
+func integrationRedeploy(command *cobra.Command, flags *integrationRedeployFlags) module.Handler {
 	return func(ctx context.Context, request module.Request) (result.Result, error) {
-		componentID, client, env, err := resolvedEnvironment(ctx, command, request, flags, "redeploy")
+		if err := flags.validate(); err != nil {
+			return result.Result{}, err
+		}
+		integrationID, client, env, err := resolvedEnvironment(ctx, command, request, &flags.environmentFlag,
+			"redeploy")
 		if err != nil {
 			return result.Result{}, err
 		}
 		var accepted struct {
 			Message string `json:"message"`
 		}
-		path := componentPath(componentID) + "/deployments/redeploy?" + url.Values{"environment": {env.ID}}.Encode()
+		endpoint := request.Context.Endpoint
+		path := integrationPath(integrationID) + "/deployments/redeploy?" + url.Values{"environment": {env.ID}}.Encode()
 		if err := client.Post(ctx, path, nil, &accepted); err != nil {
-			return result.Result{}, callFailedNaming(err, "redeploy "+componentID+" in "+env.ID,
-				request.Context.Endpoint, "Run wso2 intg deployment list "+componentID+" to see where it is deployed.")
+			return result.Result{}, callFailedNaming(err, "redeploy "+integrationID+" in "+env.ID, endpoint,
+				"Run wso2 intg integration deployment list "+integrationID+" to see where it is deployed.")
+		}
+		release, status := "-", "requested"
+		next := "Run wso2 intg integration deployment show " + integrationID + " --env " + env.ID + " to see it start."
+		if flags.wait {
+			running, err := waitForRestart(ctx, client, integrationID, env.ID, flags.timeout, endpoint)
+			if err != nil {
+				return result.Result{}, err
+			}
+			release, status = running.Release, running.Status
+			next = "Run wso2 intg integration logs " + integrationID + " --env " + env.ID + " to see what it does."
 		}
 		return result.New(RedeploySchema).
-			With("component", "Component", componentID).
+			With("integration", "Integration", integrationID).
 			With("environment", "Environment", env.ID).
+			With("release", "Release", release).
+			With("status", "Status", status).
 			With("message", "Message", orDash(accepted.Message)).
-			With(NextField, "Next", "Run wso2 intg deployment show "+componentID+" --env "+env.ID+
-				" to see it start."), nil
+			With(NextField, "Next", next), nil
 	}
 }

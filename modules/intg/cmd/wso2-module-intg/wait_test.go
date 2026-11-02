@@ -41,7 +41,8 @@ func TestTheWaitingCommandsDeclareALongerDeadline(t *testing.T) {
 	for _, command := range declared.Commands {
 		path := strings.Join(command.Path, " ")
 		want := 0
-		if path == "build run" || path == "component deploy" || path == "component promote" {
+		switch path {
+		case "integration build run", "integration deploy", "integration promote", "integration redeploy":
 			want = int(waitDeadline / time.Second)
 		}
 		if command.TimeoutSeconds != want {
@@ -70,7 +71,7 @@ func TestBuildRunWaitFollowsTheNewBuildUntilItSucceeds(t *testing.T) {
 	fastPolling(t)
 	stub := newPlatformStub(t, buildWaitRoutes("Succeeded"))
 
-	outcome := run([]string{"build", "run"}, []string{"order-api", "--wait"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "build", "run"}, []string{"order-api", "--wait"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
 		t.Fatalf("build run --wait failed: %v %v", outcome.Err, outcome.Problem)
@@ -78,7 +79,7 @@ func TestBuildRunWaitFollowsTheNewBuildUntilItSucceeds(t *testing.T) {
 	if outcome.Result.Schema != BuildSchema || field(outcome, "name") != "b3" || field(outcome, "status") != "Succeeded" {
 		t.Errorf("result = %+v, want the new build b3, succeeded", outcome.Result.Fields)
 	}
-	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg component deploy order-api --env <environment> --build b3") {
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration deploy order-api --env <environment> --build b3") {
 		t.Errorf("next = %q, want it to name deploying b3", next)
 	}
 	if stub.paths[0] != "GET "+basePath+"/components/order-api/builds" || stub.paths[1] != "POST "+basePath+"/components/order-api/builds" {
@@ -90,10 +91,10 @@ func TestBuildRunWaitReportsAFailedBuildAsAProblem(t *testing.T) {
 	fastPolling(t)
 	stub := newPlatformStub(t, buildWaitRoutes("Failed"))
 
-	outcome := run([]string{"build", "run"}, []string{"order-api", "--wait"}, stub.endpoint(), &testkit.Access{Token: "t"})
+	outcome := run([]string{"integration", "build", "run"}, []string{"order-api", "--wait"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.build_failed", problem.CategoryProductService)
-	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg build logs order-api b3") {
+	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg integration build logs order-api b3") {
 		t.Errorf("recovery = %q, want it to name the build's logs", outcome.Problem.Recovery)
 	}
 }
@@ -104,11 +105,11 @@ func TestBuildRunWaitStopsAtItsTimeout(t *testing.T) {
 	routes["/components/order-api/builds/b3"] = stubRoute{status: http.StatusOK, body: `{"name":"b3","status":"Running"}`}
 	stub := newPlatformStub(t, routes)
 
-	outcome := run([]string{"build", "run"}, []string{"order-api", "--wait", "--wait-timeout", "50ms"}, stub.endpoint(),
+	outcome := run([]string{"integration", "build", "run"}, []string{"order-api", "--wait", "--wait-timeout", "50ms"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.wait_timeout", problem.CategoryProductService)
-	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg build show order-api b3") {
+	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg integration build show order-api b3") {
 		t.Errorf("recovery = %q, want it to name the build to follow", outcome.Problem.Recovery)
 	}
 }
@@ -116,7 +117,7 @@ func TestBuildRunWaitStopsAtItsTimeout(t *testing.T) {
 func TestAWaitTimeoutBeyondTheDeclaredDeadlineIsRefused(t *testing.T) {
 	stub := newPlatformStub(t, nil)
 
-	outcome := run([]string{"build", "run"}, []string{"order-api", "--wait", "--wait-timeout", "1h"}, stub.endpoint(),
+	outcome := run([]string{"integration", "build", "run"}, []string{"order-api", "--wait", "--wait-timeout", "1h"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)
@@ -125,7 +126,7 @@ func TestAWaitTimeoutBeyondTheDeclaredDeadlineIsRefused(t *testing.T) {
 	}
 }
 
-// --- component deploy and promote --wait ----------------------------------
+// --- integration deploy and promote --wait ----------------------------------
 
 // rollout is development answering the old release, then the new one in
 // progress, then the new one ending as final.
@@ -139,29 +140,29 @@ func rollout(environment, release, final string) map[string]stubRoute {
 	}
 }
 
-func TestComponentDeployWaitFollowsTheNewReleaseUntilItIsActive(t *testing.T) {
+func TestIntegrationDeployWaitFollowsTheNewReleaseUntilItIsActive(t *testing.T) {
 	fastPolling(t)
 	routes := rollout("development", "order-api-r4", "ACTIVE")
 	routes["POST /components/order-api/deployments"] = stubRoute{status: http.StatusOK, body: `{"message":"order-api-r4"}`}
 	stub := newPlatformStub(t, deploymentRoutes(routes))
 
-	outcome := run([]string{"component", "deploy"}, []string{"order-api", "--env", "development", "--project", "orders",
+	outcome := run([]string{"integration", "deploy"}, []string{"order-api", "--env", "development", "--project", "orders",
 		"--wait"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component deploy --wait failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration deploy --wait failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if field(outcome, "release") != "order-api-r4" || field(outcome, "status") != "ACTIVE" {
 		t.Errorf("result = %+v, want order-api-r4 active", outcome.Result.Fields)
 	}
 }
 
-func TestComponentDeployWithoutWaitReportsTheRequest(t *testing.T) {
+func TestIntegrationDeployWithoutWaitReportsTheRequest(t *testing.T) {
 	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
 		"POST /components/order-api/deployments": {status: http.StatusOK, body: `{"message":"order-api-r4"}`},
 	}))
 
-	outcome := run([]string{"component", "deploy"}, []string{"order-api", "--env", "development", "--project", "orders"},
+	outcome := run([]string{"integration", "deploy"}, []string{"order-api", "--env", "development", "--project", "orders"},
 		stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if field(outcome, "status") != "requested" {
@@ -170,22 +171,22 @@ func TestComponentDeployWithoutWaitReportsTheRequest(t *testing.T) {
 	assertNoReadAfterWrite(t, stub)
 }
 
-func TestComponentDeployWaitReportsAFailedRollout(t *testing.T) {
+func TestIntegrationDeployWaitReportsAFailedRollout(t *testing.T) {
 	fastPolling(t)
 	routes := rollout("development", "order-api-r4", "ERROR")
 	routes["POST /components/order-api/deployments"] = stubRoute{status: http.StatusOK, body: `{"message":"order-api-r4"}`}
 	stub := newPlatformStub(t, deploymentRoutes(routes))
 
-	outcome := run([]string{"component", "deploy"}, []string{"order-api", "--env", "development", "--project", "orders",
+	outcome := run([]string{"integration", "deploy"}, []string{"order-api", "--env", "development", "--project", "orders",
 		"--wait"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	assertProblem(t, outcome, "intg.deployment_failed", problem.CategoryProductService)
-	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg component logs order-api --env development") {
-		t.Errorf("recovery = %q, want it to name the component's logs", outcome.Problem.Recovery)
+	if !strings.Contains(outcome.Problem.Recovery, "wso2 intg integration logs order-api --env development") {
+		t.Errorf("recovery = %q, want it to name the integration's logs", outcome.Problem.Recovery)
 	}
 }
 
-func TestComponentPromoteWaitFollowsTheTargetEnvironment(t *testing.T) {
+func TestIntegrationPromoteWaitFollowsTheTargetEnvironment(t *testing.T) {
 	fastPolling(t)
 	routes := map[string]stubRoute{
 		"GET /components/order-api/deployments?environmentId=production": {status: http.StatusOK, body: ``,
@@ -194,11 +195,11 @@ func TestComponentPromoteWaitFollowsTheTargetEnvironment(t *testing.T) {
 	}
 	stub := newPlatformStub(t, deploymentRoutes(routes))
 
-	outcome := run([]string{"component", "promote"}, []string{"order-api", "--from", "development", "--to", "production",
+	outcome := run([]string{"integration", "promote"}, []string{"order-api", "--from", "development", "--to", "production",
 		"--project", "orders", "--wait"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component promote --wait failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration promote --wait failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if field(outcome, "status") != "ACTIVE" {
 		t.Errorf("status = %q, want ACTIVE", field(outcome, "status"))
@@ -212,5 +213,78 @@ func assertNoReadAfterWrite(t *testing.T, stub *platformStub) {
 	last := stub.paths[len(stub.paths)-1]
 	if strings.HasPrefix(last, "GET ") {
 		t.Errorf("the command read %s after its write, without --wait", last)
+	}
+}
+
+// --- integration redeploy --wait ------------------------------------------
+
+// restart is development answering a stopped release, then the same release
+// starting, then ending as final.
+func restart(final string) map[string]stubRoute {
+	return map[string]stubRoute{
+		"POST /components/order-api/deployments/redeploy": {status: http.StatusOK, body: `{"message":"redeploy requested"}`},
+		"GET /components/order-api/deployments?environmentId=development": {status: http.StatusOK,
+			body: `{"releaseId":"order-api-r3","deploymentStatusV2":"SUSPENDED"}`,
+			then: []stubRoute{
+				{status: http.StatusOK, body: `{"releaseId":"order-api-r3","deploymentStatusV2":"IN_PROGRESS"}`},
+				{status: http.StatusOK, body: `{"releaseId":"order-api-r3","deploymentStatusV2":"` + final + `"}`},
+			}},
+	}
+}
+
+// A stopped release reads SUSPENDED until it starts again, so a wait after a
+// stop goes on through it rather than reporting a failure.
+func TestIntegrationRedeployWaitFollowsAStoppedReleaseUntilItIsActive(t *testing.T) {
+	fastPolling(t)
+	stub := newPlatformStub(t, deploymentRoutes(restart("ACTIVE")))
+
+	outcome := run([]string{"integration", "redeploy"}, []string{"order-api", "--env", "development", "--wait"},
+		stub.endpoint(), &testkit.Access{Token: "t"})
+
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("integration redeploy --wait failed: %v %v", outcome.Err, outcome.Problem)
+	}
+	if field(outcome, "release") != "order-api-r3" || field(outcome, "status") != "ACTIVE" {
+		t.Errorf("result = %+v, want order-api-r3 active", outcome.Result.Fields)
+	}
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration logs order-api --env development") {
+		t.Errorf("next = %q, want it to name the integration's logs", next)
+	}
+}
+
+func TestIntegrationRedeployWaitReportsAFailedRestart(t *testing.T) {
+	fastPolling(t)
+	stub := newPlatformStub(t, deploymentRoutes(restart("ERROR")))
+
+	outcome := run([]string{"integration", "redeploy"}, []string{"order-api", "--env", "development", "--wait"},
+		stub.endpoint(), &testkit.Access{Token: "t"})
+
+	assertProblem(t, outcome, "intg.deployment_failed", problem.CategoryProductService)
+}
+
+func TestIntegrationRedeployWithoutWaitReportsTheRequest(t *testing.T) {
+	stub := newPlatformStub(t, deploymentRoutes(restart("ACTIVE")))
+
+	outcome := run([]string{"integration", "redeploy"}, []string{"order-api", "--env", "development"},
+		stub.endpoint(), &testkit.Access{Token: "t"})
+
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("integration redeploy failed: %v %v", outcome.Err, outcome.Problem)
+	}
+	if field(outcome, "status") != "requested" || field(outcome, "message") != "redeploy requested" {
+		t.Errorf("result = %+v, want the request reported", outcome.Result.Fields)
+	}
+	assertNoReadAfterWrite(t, stub)
+}
+
+func TestIntegrationRedeployRefusesAWaitItCannotHonour(t *testing.T) {
+	stub := newPlatformStub(t, deploymentRoutes(nil))
+
+	outcome := run([]string{"integration", "redeploy"}, []string{"order-api", "--env", "development", "--wait",
+		"--wait-timeout", "2h"}, stub.endpoint(), &testkit.Access{Token: "t"})
+
+	assertProblem(t, outcome, "intg.invalid_argument", problem.CategoryUsage)
+	if stub.calls != 0 {
+		t.Errorf("a refused command line reached the API (%v)", stub.paths)
 	}
 }

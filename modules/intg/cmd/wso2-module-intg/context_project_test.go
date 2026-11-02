@@ -36,16 +36,16 @@ func runInProject(command []string, arguments []string, endpoint, project string
 	})
 }
 
-func TestComponentListDefaultsToTheContextsProject(t *testing.T) {
+func TestIntegrationListDefaultsToTheContextsProject(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/projects/orders/components":   {status: http.StatusOK, body: ordersComponents},
-		"/projects/payments/components": {status: http.StatusOK, body: paymentsComponents},
+		"/projects/orders/components":   {status: http.StatusOK, body: ordersIntegrations},
+		"/projects/payments/components": {status: http.StatusOK, body: paymentsIntegrations},
 	})
 
-	outcome := runInProject([]string{"component", "list"}, nil, stub.endpoint(), "orders")
+	outcome := runInProject([]string{"integration", "list"}, nil, stub.endpoint(), "orders")
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component list failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration list failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if strings.Join(stub.paths, ", ") != "GET "+basePath+"/projects/orders/components" {
 		t.Errorf("calls = %v, want only the context's project", stub.paths)
@@ -54,50 +54,50 @@ func TestComponentListDefaultsToTheContextsProject(t *testing.T) {
 
 func TestAProjectFlagOverridesTheContextsProject(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
-		"/projects/orders/components":   {status: http.StatusOK, body: ordersComponents},
-		"/projects/payments/components": {status: http.StatusOK, body: paymentsComponents},
+		"/projects/orders/components":   {status: http.StatusOK, body: ordersIntegrations},
+		"/projects/payments/components": {status: http.StatusOK, body: paymentsIntegrations},
 	})
 
-	outcome := runInProject([]string{"component", "list"}, []string{"--project", "payments"}, stub.endpoint(), "orders")
+	outcome := runInProject([]string{"integration", "list"}, []string{"--project", "payments"}, stub.endpoint(), "orders")
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component list failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration list failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	if strings.Join(stub.paths, ", ") != "GET "+basePath+"/projects/payments/components" {
 		t.Errorf("calls = %v, want the project the flag names", stub.paths)
 	}
 }
 
-func TestComponentCreateTakesItsProjectFromTheContext(t *testing.T) {
+func TestIntegrationCreateTakesItsProjectFromTheContext(t *testing.T) {
 	stub := newPlatformStub(t, map[string]stubRoute{
 		"POST /projects/orders/components": {status: http.StatusCreated, body: `{"id":"order-api","projectId":"orders"}`},
 	})
 
-	outcome := runInProject([]string{"component", "create"}, []string{"order-api", "--type", "integration-as-api",
+	outcome := runInProject([]string{"integration", "create"}, []string{"order-api", "--type", "integration-as-api",
 		"--runtime", "wso2-integrator", "--repo", "https://github.com/acme/orders.git", "--branch", "main"},
 		stub.endpoint(), "orders")
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component create failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration create failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	owner := decodeBody(t, stub.body)["spec"].(map[string]any)["owner"].(map[string]any)
 	if owner["projectName"] != "orders" {
-		t.Errorf("the component was owned by %v, want the context's project", owner["projectName"])
+		t.Errorf("the integration was owned by %v, want the context's project", owner["projectName"])
 	}
 }
 
-// With a project on the context, the commands that find a component's project
+// With a project on the context, the commands that find an integration's project
 // do not search every project's listing for it.
 func TestDeployWithTheContextsProjectSkipsTheSearch(t *testing.T) {
 	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
 		"POST /components/order-api/deployments": {status: http.StatusOK, body: `{"message":"order-api-r4"}`},
 	}))
 
-	outcome := runInProject([]string{"component", "deploy"}, []string{"order-api", "--env", "development"},
+	outcome := runInProject([]string{"integration", "deploy"}, []string{"order-api", "--env", "development"},
 		stub.endpoint(), "orders")
 
 	if outcome.Err != nil || outcome.Problem != nil {
-		t.Fatalf("component deploy failed: %v %v", outcome.Err, outcome.Problem)
+		t.Fatalf("integration deploy failed: %v %v", outcome.Err, outcome.Problem)
 	}
 	for _, call := range stub.paths {
 		if call == "GET "+basePath+"/projects" {
