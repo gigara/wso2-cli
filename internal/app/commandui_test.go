@@ -873,6 +873,68 @@ func TestHelpForAnUnknownProductSubcommandIsRefused(t *testing.T) {
 	}
 }
 
+// groupedReferenceTree is the reference product with a group that runs nothing
+// and holds actions, the shape the shell was shrugging an unknown word into.
+func groupedReferenceTree() commandtree.Tree {
+	return commandtree.New([]commandtree.Command{
+		{Path: nil, Short: "Explore the reference product."},
+		{Path: []string{"api"}, Short: "Read and design the APIs."},
+		{Path: []string{"api", "list"}, Runnable: true, Short: "List the APIs."},
+		{Path: []string{"api", "create"}, Runnable: true, Short: "Create an API."},
+	})
+}
+
+// TestAnUnknownActionUnderAProductGroupIsRefused proves the walk refuses a word
+// below a group the same way it refuses one below the namespace, on both the
+// invoking and the help paths. Before this, "api lst" printed the api group's
+// page and exited 0, which docs/guides/command-design.md says an unknown
+// command must never do.
+func TestAnUnknownActionUnderAProductGroupIsRefused(t *testing.T) {
+	for _, args := range [][]string{
+		{"reference", "api", "lst"},
+		{"help", "reference", "api", "lst"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			shell, out, errOut := newShell(t)
+			installFixture(t, shell, fixture.Module{
+				Namespace: "reference", Version: "0.1.0", CommandTree: groupedReferenceTree(),
+			})
+
+			if code := shell.Run(args); code != exit.Usage {
+				t.Fatalf("exit code = %d, want the usage class %d; stdout: %s stderr: %s",
+					code, exit.Usage, out, errOut)
+			}
+			if !strings.Contains(errOut.String(), "shell.unknown_product_command") ||
+				!strings.Contains(errOut.String(), `"lst"`) {
+				t.Errorf("the unknown action is not named:\n%s", errOut)
+			}
+			if !strings.Contains(errOut.String(), "wso2 reference api list") {
+				t.Errorf("the nearest action is not offered:\n%s", errOut)
+			}
+			if out.Len() != 0 {
+				t.Errorf("the group's help page was printed anyway:\n%s", out)
+			}
+		})
+	}
+}
+
+// TestABareProductGroupStillListsItsActions pins what the refusal must not
+// take away: a group named with nothing after it has nothing to run, and its
+// actions are the useful answer, exiting 0.
+func TestABareProductGroupStillListsItsActions(t *testing.T) {
+	shell, out, errOut := newShell(t)
+	installFixture(t, shell, fixture.Module{
+		Namespace: "reference", Version: "0.1.0", CommandTree: groupedReferenceTree(),
+	})
+
+	if code := shell.Run([]string{"reference", "api"}); code != exit.OK {
+		t.Fatalf("exit code = %d, want %d; stderr: %s", code, exit.OK, errOut)
+	}
+	if !strings.Contains(out.String(), "list") || !strings.Contains(out.String(), "create") {
+		t.Errorf("the group's actions are not listed:\n%s", out)
+	}
+}
+
 // TestHelpAboutAnUndeclaredModuleIsRefusedTruthfully pins F6's help-command
 // half: a module installed from a build that predates command-tree declaration
 // has no declaration to answer from, and the shell says that instead of
