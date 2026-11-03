@@ -79,8 +79,10 @@ func run() error {
 	fmt.Printf("Installed %s %s at %s.\n", manifest.CommandName, manifest.ShellVersion, shell)
 
 	// A module already installed at this version is taken off first, so a
-	// bundle can be installed again over itself.
-	_ = runShell(shell, stateRoot, io.Discard, "product", "remove", manifest.Namespace)
+	// bundle can be installed again over itself. --yes because removing asks,
+	// and the installer's shell has no terminal to ask at: without it the
+	// removal is refused and nothing is taken off.
+	_ = runShell(shell, stateRoot, io.Discard, "product", "remove", manifest.Namespace, "--yes")
 
 	declaration, err := declarationOf(dir, manifest.Namespace)
 	if err != nil {
