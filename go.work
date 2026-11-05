@@ -23,6 +23,7 @@ go 1.26.10
 use (
 	.
 	./modules/example
+	./modules/intg
 	./sdk
 )
 
