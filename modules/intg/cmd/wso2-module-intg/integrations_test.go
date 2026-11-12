@@ -346,13 +346,14 @@ func TestIntegrationCreateRefusesAnIncompleteCommandLine(t *testing.T) {
 
 func TestIntegrationCreateMapsItsOwnRefusals(t *testing.T) {
 	cases := []struct {
-		name   string
-		status int
-		code   string
+		name     string
+		status   int
+		code     string
+		category problem.Category
 	}{
-		{"every suffixed name taken", http.StatusConflict, "intg.integration_exists"},
-		{"plan limit", http.StatusPaymentRequired, "intg.plan_limit"},
-		{"bad request", http.StatusBadRequest, "intg.call_failed"},
+		{"every suffixed name taken", http.StatusConflict, "intg.integration_exists", problem.CategoryProductService},
+		{"plan limit", http.StatusPaymentRequired, "intg.plan_limit", problem.CategoryProductService},
+		{"bad request", http.StatusBadRequest, "intg.call_failed", problem.CategoryUsage},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -360,7 +361,7 @@ func TestIntegrationCreateMapsItsOwnRefusals(t *testing.T) {
 
 			outcome := run([]string{"integration", "create"}, createArguments(), stub.endpoint(), &testkit.Access{Token: "t"})
 
-			assertProblem(t, outcome, c.code, problem.CategoryProductService)
+			assertProblem(t, outcome, c.code, c.category)
 			if !strings.Contains(outcome.Problem.Message, "the platform's words") {
 				t.Errorf("message = %q, want the platform's words", outcome.Problem.Message)
 			}

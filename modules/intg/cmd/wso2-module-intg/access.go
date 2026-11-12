@@ -37,7 +37,7 @@ import (
 // exactly what the context's product record consents to.
 func clientFor(ctx context.Context, request module.Request) (platform.Client, error) {
 	if request.Context.Endpoint == "" {
-		return platform.Client{}, problem.New(problem.CategoryAuthPolicy, "intg.product_not_recorded",
+		return platform.Client{}, problem.New(problem.CategoryUsage, "intg.product_not_recorded",
 			"the selected context records no URL for the intg product, so this command has nowhere to call").
 			WithRecovery("Run wso2 context product add intg --url <integration platform API URL> to record it " +
 				"on the selected context, then run this command again.")
@@ -80,6 +80,13 @@ func callFailedNaming(err error, attempted, endpoint, notFoundRecovery string) e
 		return problem.New(problem.CategoryProductService, "intg.plan_limit",
 			"the organization's plan does not allow this: could not "+attempted+": "+words).
 			WithRecovery("Check the organization's subscription in the WSO2 Cloud console.")
+	case http.StatusBadRequest:
+		// The API judged the request itself, so retrying it unchanged would be
+		// refused the same way.
+		return problem.New(problem.CategoryUsage, "intg.call_failed",
+			"the Integration Platform refused the request to "+attempted+": "+words).
+			WithRecovery("Check the arguments and flags given on the command line against the message above, " +
+				"then run the command again.")
 	case http.StatusNotFound:
 		return problem.New(problem.CategoryProductService, "intg.not_found",
 			"the Integration Platform found nothing to "+attempted+": "+words).

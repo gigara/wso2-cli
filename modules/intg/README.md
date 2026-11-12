@@ -129,22 +129,31 @@ first.
 
 - `integration build run --wait` reads the build listing before starting a build, finds
   the build as the name that was not there before (the API does not return
-  it), and follows it until it finishes. A build that does not succeed is
-  `intg.build_failed`, naming its logs.
+  it), of the commit given with `--commit`, and follows it until it finishes.
+  Two new builds it cannot tell apart, such as one someone else started at the
+  same moment, are `intg.build_ambiguous`, naming both. A build that does not
+  succeed is `intg.build_failed`, naming its logs.
 - `integration deploy --wait` and `integration promote --wait` follow the target
   environment until the new release is `ACTIVE`. One that ends `ERROR` or
   `SUSPENDED` is `intg.deployment_failed`, naming the integration's logs.
   Without `--wait`, their result's `status` is `requested`.
 - `integration redeploy --wait` follows the environment until its release is
   `ACTIVE` again. A stopped release reads `SUSPENDED` until it starts, so only
-  `ERROR` ends the wait early, as `intg.deployment_failed`.
+  `ERROR` ends the wait early, as `intg.deployment_failed`. A running release
+  reads `ACTIVE` before its restart as well as after it, so the wait first
+  waits to see the rollout; one not seen within a minute is reported as such
+  rather than as a restart.
 - A wait that runs out is `intg.wait_timeout`, naming the command that shows
   where things stand.
 
-Every failure keeps the API's own words. A missing product URL is
-`intg.product_not_recorded`; 401 and 403 are `intg.not_authorized`; 402 is
-`intg.plan_limit`; 404 is `intg.not_found`; other refusals are
-`intg.call_failed`; no answer at all is `intg.deployment_unreachable`.
+Every failure keeps the API's own words. A missing product URL
+(`intg.product_not_recorded`) or observability URL
+(`intg.observability_not_recorded`) is configuration, exit class 64. A 400 is
+`intg.call_failed` in the same class, pointing at the command line; 401 and 403
+are `intg.not_authorized`, and a 403 on promote `intg.promotion_refused`, both
+exit class 77; 402 is `intg.plan_limit`; 404 is `intg.not_found`; other
+refusals are `intg.call_failed`; no answer at all is
+`intg.deployment_unreachable`.
 
 ## What this module must not do
 

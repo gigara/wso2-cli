@@ -288,3 +288,162 @@ func TestIntegrationRedeployRefusesAWaitItCannotHonour(t *testing.T) {
 		t.Errorf("a refused command line reached the API (%v)", stub.paths)
 	}
 }
+
+// --- review follow-ups: what a wait counts as done --------------------------
+
+// running is development answering the release order-api-r3 in each status in
+// turn, the last repeated.
+func running(statuses ...string) stubRoute {
+	answers := make([]stubRoute, len(statuses))
+	for i, status := range statuses {
+		answers[i] = stubRoute{status: http.StatusOK,
+			body: `{"releaseId":"order-api-r3","deploymentStatusV2":"` + status + `"}`}
+	}
+	return stubRoute{status: answers[0].status, body: answers[0].body, then: answers[1:]}
+}
+
+func redeployRoutes(deployment stubRoute) map[string]stubRoute {
+	return deploymentRoutes(map[string]stubRoute{
+		"POST /components/order-api/deployments/redeploy":                 {status: http.StatusOK, body: `{"message":"redeployed"}`},
+		"GET /components/order-api/deployments?environmentId=development": deployment,
+	})
+}
+
+// A running release reads ACTIVE before its restart too, so the wait holds out
+// for the rollout before it counts ACTIVE as the restart done.
+func TestIntegrationRedeployWaitOfARunningReleaseWaitsForItsRollout(t *testing.T) {
+	fastPolling(t)
+	stub := newPlatformStub(t, redeployRoutes(running("ACTIVE", "ACTIVE", "IN_PROGRESS", "ACTIVE")))
+
+	outcome := run([]string{"integration", "redeploy"}, []string{"order-api", "--env", "development", "--wait"},
+		stub.endpoint(), &testkit.Access{Token: "t"})
+
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("integration redeploy --wait failed: %v %v", outcome.Err, outcome.Problem)
+	}
+	reads := 0
+	for _, path := range stub.paths {
+		if strings.HasPrefix(path, "GET "+basePath+"/components/order-api/deployments") {
+			reads++
+		}
+	}
+	if field(outcome, "status") != "ACTIVE" || reads != 4 {
+		t.Errorf("status %q after %d reads, want ACTIVE only after the rollout was seen (4 reads)",
+			field(outcome, "status"), reads)
+	}
+	if next := field(outcome, NextField); !strings.Contains(next, "wso2 intg integration logs order-api") {
+		t.Errorf("next = %q, want it to name the logs", next)
+	}
+}
+
+func TestIntegrationRedeployWaitSaysSoWhenNoRolloutWasSeen(t *testing.T) {
+	fastPolling(t)
+	previous := restartGrace
+	restartGrace = 20 * time.Millisecond
+	t.Cleanup(func() { restartGrace = previous })
+	stub := newPlatformStub(t, redeployRoutes(running("ACTIVE")))
+
+	outcome := run([]string{"integration", "redeploy"}, []string{"order-api", "--env", "development", "--wait"},
+		stub.endpoint(), &testkit.Access{Token: "t"})
+
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("integration redeploy --wait failed: %v %v", outcome.Err, outcome.Problem)
+	}
+	if next := field(outcome, NextField); !strings.Contains(next, "no rollout was seen") {
+		t.Errorf("next = %q, want it to say no rollout was seen", next)
+	}
+}
+
+func TestIntegrationRedeployWaitOfARunningReleaseReportsAFailedRollout(t *testing.T) {
+	fastPolling(t)
+	stub := newPlatformStub(t, redeployRoutes(running("ACTIVE", "IN_PROGRESS", "ERROR")))
+
+	outcome := run([]string{"integration", "redeploy"}, []string{"order-api", "--env", "development", "--wait"},
+		stub.endpoint(), &testkit.Access{Token: "t"})
+
+	assertProblem(t, outcome, "intg.deployment_failed", problem.CategoryProductService)
+}
+
+// An answer that is not a release of the integration is not waited for by
+// name: any release other than the one running before is.
+func TestIntegrationDeployWaitWithoutAReleaseNameWaitsForANewRelease(t *testing.T) {
+	fastPolling(t)
+	routes := deploymentRoutes(map[string]stubRoute{
+		"POST /components/order-api/deployments": {status: http.StatusOK, body: `{"message":"development"}`},
+		"GET /components/order-api/deployments?environmentId=development": {status: http.StatusOK,
+			body: `{"releaseId":"order-api-r3","deploymentStatusV2":"ACTIVE"}`,
+			then: []stubRoute{
+				{status: http.StatusOK, body: `{"releaseId":"order-api-r3","deploymentStatusV2":"ACTIVE"}`},
+				{status: http.StatusOK, body: `{"releaseId":"order-api-r4","deploymentStatusV2":"ACTIVE"}`},
+			}},
+	})
+	stub := newPlatformStub(t, routes)
+
+	outcome := run([]string{"integration", "deploy"}, []string{"order-api", "--env", "development", "--project", "orders",
+		"--wait"}, stub.endpoint(), &testkit.Access{Token: "t"})
+
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("integration deploy --wait failed: %v %v", outcome.Err, outcome.Problem)
+	}
+	if field(outcome, "release") != "order-api-r4" {
+		t.Errorf("release = %q, want the new order-api-r4, not the r3 that ran before", field(outcome, "release"))
+	}
+}
+
+// Two builds that start together cannot be told apart, so the wait names them
+// rather than following either.
+func TestBuildRunWaitRefusesTwoBuildsItCannotTellApart(t *testing.T) {
+	fastPolling(t)
+	routes := buildWaitRoutes("Succeeded")
+	routes["GET /components/order-api/builds"] = stubRoute{status: http.StatusOK,
+		body: `{"items":[{"name":"b2","status":"Succeeded"}]}`,
+		then: []stubRoute{{status: http.StatusOK, body: `{"items":[{"name":"b4","status":"Running"},` +
+			`{"name":"b3","status":"Running"},{"name":"b2","status":"Succeeded"}]}`}}}
+	stub := newPlatformStub(t, routes)
+
+	outcome := run([]string{"integration", "build", "run"}, []string{"order-api", "--wait"}, stub.endpoint(),
+		&testkit.Access{Token: "t"})
+
+	assertProblem(t, outcome, "intg.build_ambiguous", problem.CategoryProductService)
+	if !strings.Contains(outcome.Problem.Message, "b4, b3") || !strings.Contains(outcome.Problem.Recovery, "--commit") {
+		t.Errorf("problem = %+v, want both builds named and --commit offered", outcome.Problem)
+	}
+}
+
+func TestBuildRunWaitWithACommitFollowsTheBuildOfThatCommit(t *testing.T) {
+	fastPolling(t)
+	routes := buildWaitRoutes("Succeeded")
+	routes["GET /components/order-api/builds"] = stubRoute{status: http.StatusOK,
+		body: `{"items":[{"name":"b2","status":"Succeeded"}]}`,
+		then: []stubRoute{{status: http.StatusOK, body: `{"items":[{"name":"b4","status":"Running","commit":"` +
+			strings.Repeat("b", 40) + `"},{"name":"b3","status":"Running","commit":"` + fullCommit + `"},` +
+			`{"name":"b2","status":"Succeeded"}]}`}}}
+	stub := newPlatformStub(t, routes)
+
+	outcome := run([]string{"integration", "build", "run"}, []string{"order-api", "--commit", fullCommit, "--wait"},
+		stub.endpoint(), &testkit.Access{Token: "t"})
+
+	if outcome.Err != nil || outcome.Problem != nil {
+		t.Fatalf("build run --commit --wait failed: %v %v", outcome.Err, outcome.Problem)
+	}
+	if field(outcome, "name") != "b3" {
+		t.Errorf("followed %q, want b3, the build of the commit asked for", field(outcome, "name"))
+	}
+}
+
+// A 400 is the request itself refused, so the recovery points at the command
+// line rather than at retrying it.
+func TestABadRequestPointsAtTheCommandLine(t *testing.T) {
+	stub := newPlatformStub(t, deploymentRoutes(map[string]stubRoute{
+		"PUT /components/order-api/deployments/stop": {status: http.StatusBadRequest,
+			body: `{"error":"Bad Request","message":"environment is required"}`},
+	}))
+
+	outcome := run([]string{"integration", "stop"}, []string{"order-api", "--env", "development"}, stub.endpoint(),
+		&testkit.Access{Token: "t"})
+
+	assertProblem(t, outcome, "intg.call_failed", problem.CategoryUsage)
+	if strings.Contains(outcome.Problem.Recovery, "Retry") || !strings.Contains(outcome.Problem.Recovery, "command line") {
+		t.Errorf("recovery = %q, want it to point at the command line", outcome.Problem.Recovery)
+	}
+}

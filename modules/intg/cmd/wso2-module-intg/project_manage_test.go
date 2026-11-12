@@ -210,7 +210,7 @@ func TestProjectCreateMapsItsOwnRefusals(t *testing.T) {
 		{"plan limit", http.StatusPaymentRequired, `{"error":"Payment Required","message":"project limit reached"}`,
 			"intg.plan_limit", problem.CategoryProductService, "subscription"},
 		{"bad request", http.StatusBadRequest, `{"error":"Bad Request","message":"name is required"}`,
-			"intg.call_failed", problem.CategoryProductService, "command line"},
+			"intg.call_failed", problem.CategoryUsage, "command line"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

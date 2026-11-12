@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -101,26 +102,86 @@ func buildInProgress(status string) bool {
 	return status == "" || status == "Pending" || status == "Running"
 }
 
-// waitForRollout polls what integrationID runs in environmentID until release
-// (or, when release is empty, any release) is active, and returns it. A
-// rollout that ends in ERROR or SUSPENDED is intg.deployment_failed.
-func waitForRollout(ctx context.Context, client platform.Client, integrationID, environmentID, release string,
-	limit time.Duration, endpoint string) (deployment, error) {
-	return waitUntilActive(ctx, client, integrationID, environmentID, release, limit, endpoint, "ERROR", "SUSPENDED")
+// restartGrace is how long a redeploy of a running release waits to see its
+// rollout begin. Tests shorten it.
+var restartGrace = time.Minute
+
+// awaited is the release a wait is for, and the statuses that end it early.
+type awaited struct {
+	// release is the one release to wait for; empty accepts any.
+	release string
+	// notRelease is a release that does not count, the one an environment ran
+	// before the command; empty excludes none.
+	notRelease string
+	// failed are the statuses that end the wait as intg.deployment_failed.
+	failed []string
+}
+
+func (w awaited) matches(found deployment) bool {
+	return found.deployed() &&
+		(w.release == "" || found.Release == w.release) &&
+		(w.notRelease == "" || found.Release != w.notRelease)
+}
+
+// waitForRollout polls what integrationID runs in environmentID until the
+// release a deploy or promotion bound is active, and returns it. A rollout
+// that ends in ERROR or SUSPENDED is intg.deployment_failed.
+//
+// The API answers with the bound release's name, which every release of an
+// integration starts with "<integration>-". An answer that is not one (the
+// API's form for an agent) is not waited for by name: any release other than
+// previous, the one the environment ran before, is.
+func waitForRollout(ctx context.Context, client platform.Client, integrationID, environmentID, release,
+	previous string, limit time.Duration, endpoint string) (deployment, error) {
+	want := awaited{release: release, failed: []string{"ERROR", "SUSPENDED"}}
+	if !strings.HasPrefix(release, integrationID+"-") {
+		want = awaited{notRelease: previous, failed: want.failed}
+	}
+	return waitUntilActive(ctx, client, integrationID, environmentID, want, limit, endpoint)
 }
 
 // waitForRestart polls what integrationID runs in environmentID until it is
-// active after a redeploy. A stopped release reads SUSPENDED until it starts
-// again, so only ERROR ends the wait early.
+// active after a redeploy, and reports whether the restart was seen.
+//
+// A stopped release reads SUSPENDED until it starts again, so only ERROR ends
+// the wait early. A running one reads ACTIVE before the restart as well as
+// after it, so ACTIVE counts only once the rollout has been seen to begin; one
+// not seen within restartGrace is reported as unseen rather than waited out.
 func waitForRestart(ctx context.Context, client platform.Client, integrationID, environmentID string,
-	limit time.Duration, endpoint string) (deployment, error) {
-	return waitUntilActive(ctx, client, integrationID, environmentID, "", limit, endpoint, "ERROR")
+	wasActive bool, limit time.Duration, endpoint string) (deployment, bool, error) {
+	want := awaited{failed: []string{"ERROR"}}
+	if !wasActive {
+		running, err := waitUntilActive(ctx, client, integrationID, environmentID, want, limit, endpoint)
+		return running, true, err
+	}
+	started := time.Now()
+	var current deployment
+	err := poll(ctx, min(restartGrace, limit), func() (bool, error) {
+		found, err := currentDeployment(ctx, client, integrationID, environmentID, endpoint)
+		if err != nil {
+			return false, err
+		}
+		current = found
+		if found.Status == "ERROR" {
+			return false, rolloutFailed(integrationID, environmentID, found)
+		}
+		return found.Status != "ACTIVE", nil
+	})
+	if errors.Is(err, errWaitTimeout) {
+		return current, false, nil
+	}
+	if err != nil {
+		return current, false, err
+	}
+	running, err := waitUntilActive(ctx, client, integrationID, environmentID, want, limit-time.Since(started),
+		endpoint)
+	return running, true, err
 }
 
-// waitUntilActive polls until the release (any release when empty) is
-// ACTIVE, failing as intg.deployment_failed on any of the failed statuses.
-func waitUntilActive(ctx context.Context, client platform.Client, integrationID, environmentID, release string,
-	limit time.Duration, endpoint string, failed ...string) (deployment, error) {
+// waitUntilActive polls until a release want matches is ACTIVE, failing as
+// intg.deployment_failed on any of want's failed statuses.
+func waitUntilActive(ctx context.Context, client platform.Client, integrationID, environmentID string,
+	want awaited, limit time.Duration, endpoint string) (deployment, error) {
 	var current deployment
 	err := poll(ctx, limit, func() (bool, error) {
 		found, err := currentDeployment(ctx, client, integrationID, environmentID, endpoint)
@@ -128,17 +189,14 @@ func waitUntilActive(ctx context.Context, client platform.Client, integrationID,
 			return false, err
 		}
 		current = found
-		if !found.deployed() || (release != "" && found.Release != release) {
+		if !want.matches(found) {
 			return false, nil
 		}
 		switch {
 		case found.Status == "ACTIVE":
 			return true, nil
-		case slices.Contains(failed, found.Status):
-			return false, problem.New(problem.CategoryProductService, "intg.deployment_failed",
-				"the release "+found.Release+" of "+integrationID+" is "+found.Status+" in "+environmentID).
-				WithRecovery("Run wso2 intg integration logs " + integrationID + " --env " + environmentID +
-					" to see why.")
+		case slices.Contains(want.failed, found.Status):
+			return false, rolloutFailed(integrationID, environmentID, found)
 		default:
 			return false, nil
 		}
@@ -150,4 +208,11 @@ func waitUntilActive(ctx context.Context, client platform.Client, integrationID,
 				" to see where it stands.")
 	}
 	return current, err
+}
+
+// rolloutFailed is a release that ended in a status it cannot leave by itself.
+func rolloutFailed(integrationID, environmentID string, found deployment) error {
+	return problem.New(problem.CategoryProductService, "intg.deployment_failed",
+		"the release "+found.Release+" of "+integrationID+" is "+found.Status+" in "+environmentID).
+		WithRecovery("Run wso2 intg integration logs " + integrationID + " --env " + environmentID + " to see why.")
 }

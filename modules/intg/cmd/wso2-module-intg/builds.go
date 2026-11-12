@@ -162,7 +162,7 @@ func buildRun(command *cobra.Command, flags *buildRunFlags) module.Handler {
 				integrationListRecovery(""))
 		}
 		if flags.wait {
-			return waitForBuild(ctx, client, integrationID, before, flags.timeout, request.Context.Endpoint)
+			return waitForBuild(ctx, client, integrationID, body["sha"], before, flags.timeout, request.Context.Endpoint)
 		}
 		return result.New(BuildStartSchema).
 			With("integration", "Integration", integrationID).
@@ -274,9 +274,15 @@ func listBuilds(ctx context.Context, client platform.Client, integrationID, endp
 	return listing.Items, nil
 }
 
-// waitForBuild finds the build a request just started, as the newest one the
-// listing did not hold before, and follows it until it finishes.
-func waitForBuild(ctx context.Context, client platform.Client, integrationID string, before map[string]bool,
+// waitForBuild finds the build a request just started and follows it until it
+// finishes.
+//
+// The API does not name the build it started, so it is found in the listing
+// as a build that was not there before, of the commit asked for when one was.
+// Someone else can start a build of the same integration at the same moment,
+// and nothing then tells the two apart: rather than follow either, the wait
+// refuses with intg.build_ambiguous, naming both.
+func waitForBuild(ctx context.Context, client platform.Client, integrationID, commit string, before map[string]bool,
 	limit time.Duration, endpoint string) (result.Result, error) {
 	deadline := time.Now().Add(limit)
 	var found build
@@ -285,13 +291,29 @@ func waitForBuild(ctx context.Context, client platform.Client, integrationID str
 		if err != nil {
 			return false, err
 		}
+		var started []build
 		for _, b := range listed {
-			if !before[b.Name] {
-				found = b
-				return true, nil
+			if !before[b.Name] && (commit == "" || strings.EqualFold(b.Commit, commit)) {
+				started = append(started, b)
 			}
 		}
-		return false, nil
+		switch len(started) {
+		case 0:
+			return false, nil
+		case 1:
+			found = started[0]
+			return true, nil
+		default:
+			names := make([]string, len(started))
+			for i, b := range started {
+				names[i] = b.Name
+			}
+			return false, problem.New(problem.CategoryProductService, "intg.build_ambiguous",
+				"more than one build of "+integrationID+" started at once ("+strings.Join(names, ", ")+
+					"), so the one this command started cannot be told apart").
+				WithRecovery("Run wso2 intg integration build show " + integrationID + " <build> for each to " +
+					"follow it, or start the build with --commit <sha> to tell it apart.")
+		}
 	})
 	if errors.Is(err, errWaitTimeout) {
 		return result.Result{}, problem.New(problem.CategoryProductService, "intg.wait_timeout",
@@ -383,7 +405,7 @@ func requireObservability(request module.Request) error {
 	if request.Context.GatewayEndpoint != "" {
 		return nil
 	}
-	return problem.New(problem.CategoryAuthPolicy, "intg.observability_not_recorded",
+	return problem.New(problem.CategoryUsage, "intg.observability_not_recorded",
 		"the selected context records no observability URL for the intg product, so logs have nowhere to be "+
 			"read from").
 		WithRecovery("Run wso2 context product add intg --url <integration platform API URL> --gateway " +

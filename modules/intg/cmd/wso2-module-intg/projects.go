@@ -311,7 +311,7 @@ func projectCreateFailed(err error, name, endpoint string) error {
 			WithRecovery("Run wso2 intg project create " + name + " again with the same options to finish it.")
 	}
 	if refused, ok := refusal(err, http.StatusBadRequest); ok {
-		return problem.New(problem.CategoryProductService, "intg.call_failed",
+		return problem.New(problem.CategoryUsage, "intg.call_failed",
 			"the Integration Platform refused to create the project "+name+": "+refusalWords(refused)).
 			WithRecovery("Check the values given on the command line, then run wso2 intg project create " +
 				name + " again.")

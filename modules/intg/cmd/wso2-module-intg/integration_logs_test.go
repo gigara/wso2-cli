@@ -177,7 +177,7 @@ func TestIntegrationLogsWithoutAGatewayNamesHowToRecordOne(t *testing.T) {
 	outcome := run([]string{"integration", "logs"}, []string{"order-api", "--env", "development"}, stub.endpoint(),
 		&testkit.Access{Token: "t"})
 
-	assertProblem(t, outcome, "intg.observability_not_recorded", problem.CategoryAuthPolicy)
+	assertProblem(t, outcome, "intg.observability_not_recorded", problem.CategoryUsage)
 	if stub.calls != 0 || len(outcome.AccessRequests) != 0 {
 		t.Errorf("a command with nowhere to read logs from reached the API (%v)", stub.paths)
 	}

@@ -510,7 +510,7 @@ func integrationCreateFailed(err error, name, endpoint string) error {
 			WithRecovery("Choose another name and run wso2 intg integration create again.")
 	}
 	if refused, ok := refusal(err, http.StatusBadRequest); ok {
-		return problem.New(problem.CategoryProductService, "intg.call_failed",
+		return problem.New(problem.CategoryUsage, "intg.call_failed",
 			"the Integration Platform refused to create the integration "+name+": "+refusalWords(refused)).
 			WithRecovery("Check the values given on the command line, then run wso2 intg integration create again.")
 	}

@@ -420,12 +420,23 @@ func integrationDeploy(command *cobra.Command, flags *integrationDeployFlags) mo
 			}
 			built = flags.build
 		}
+		// What ran here before, so a wait can tell the new release from it.
+		var previous deployment
+		if flags.wait {
+			if previous, err = currentDeployment(ctx, client, integrationID, env.ID, endpoint); err != nil {
+				return result.Result{}, err
+			}
+		}
 		var accepted struct {
 			Message string `json:"message"`
 		}
 		path := withProject(integrationPath(integrationID)+"/deployments", project)
-		// Schedule fields are left out so an automation keeps its schedule:
-		// the API leaves omitted release-binding fields untouched.
+		// imageId takes the build's name despite its own: the API defines it
+		// as the WorkflowRun name of the build to deploy, which is what a
+		// build is named, and resolves the image from it. Empty releases the
+		// current image. Schedule fields are left out so an automation keeps
+		// its schedule: the API leaves omitted release-binding fields
+		// untouched.
 		body := map[string]string{"environmentId": env.ID, "imageId": flags.build}
 		if err := client.Post(ctx, path, body, &accepted); err != nil {
 			return result.Result{}, callFailedNaming(err, "deploy "+integrationID+" to "+env.ID, endpoint,
@@ -434,7 +445,8 @@ func integrationDeploy(command *cobra.Command, flags *integrationDeployFlags) mo
 		release, status, next := accepted.Message, "requested", "Run wso2 intg integration deployment show "+integrationID+
 			" --env "+env.ID+" to see it start."
 		if flags.wait {
-			running, err := waitForRollout(ctx, client, integrationID, env.ID, release, flags.timeout, endpoint)
+			running, err := waitForRollout(ctx, client, integrationID, env.ID, release, previous.Release,
+				flags.timeout, endpoint)
 			if err != nil {
 				return result.Result{}, err
 			}
@@ -533,10 +545,11 @@ func integrationPromote(command *cobra.Command, flags *integrationPromoteFlags) 
 		}
 		path := withProject(integrationPath(integrationID)+"/deployments/promote", project)
 		if err := client.Post(ctx, path, body, &accepted); err != nil {
-			// The API answers a hop the pipeline does not allow with a 403,
-			// which here is a pipeline rule rather than a missing permission.
+			// The API answers a 403 both for a hop the pipeline does not allow
+			// and for a caller without permission on the pipeline. Either is a
+			// policy refusal, so it keeps its own code with the pipeline named.
 			if refused, ok := refusal(err, http.StatusForbidden); ok {
-				return result.Result{}, problem.New(problem.CategoryProductService, "intg.promotion_refused",
+				return result.Result{}, problem.New(problem.CategoryAuthPolicy, "intg.promotion_refused",
 					"the Integration Platform refused to promote "+integrationID+" from "+from.ID+" to "+to.ID+": "+
 						refusalWords(refused)).
 					WithRecovery("Check that the project " + project + "'s deployment pipeline promotes " + from.ID +
@@ -551,7 +564,7 @@ func integrationPromote(command *cobra.Command, flags *integrationPromoteFlags) 
 		}
 		status, next := "requested", "Run wso2 intg integration deployment show "+integrationID+" --env "+to.ID+" to see it start."
 		if flags.wait {
-			running, err := waitForRollout(ctx, client, integrationID, to.ID, release, flags.timeout, endpoint)
+			running, err := waitForRollout(ctx, client, integrationID, to.ID, release, "", flags.timeout, endpoint)
 			if err != nil {
 				return result.Result{}, err
 			}
@@ -641,10 +654,18 @@ func integrationRedeploy(command *cobra.Command, flags *integrationRedeployFlags
 		if err != nil {
 			return result.Result{}, err
 		}
+		endpoint := request.Context.Endpoint
+		// Whether the release was running decides what --wait can see: a
+		// running one reads ACTIVE before its restart as well as after it.
+		var before deployment
+		if flags.wait {
+			if before, err = currentDeployment(ctx, client, integrationID, env.ID, endpoint); err != nil {
+				return result.Result{}, err
+			}
+		}
 		var accepted struct {
 			Message string `json:"message"`
 		}
-		endpoint := request.Context.Endpoint
 		path := integrationPath(integrationID) + "/deployments/redeploy?" + url.Values{"environment": {env.ID}}.Encode()
 		if err := client.Post(ctx, path, nil, &accepted); err != nil {
 			return result.Result{}, callFailedNaming(err, "redeploy "+integrationID+" in "+env.ID, endpoint,
@@ -653,12 +674,18 @@ func integrationRedeploy(command *cobra.Command, flags *integrationRedeployFlags
 		release, status := "-", "requested"
 		next := "Run wso2 intg integration deployment show " + integrationID + " --env " + env.ID + " to see it start."
 		if flags.wait {
-			running, err := waitForRestart(ctx, client, integrationID, env.ID, flags.timeout, endpoint)
+			running, seen, err := waitForRestart(ctx, client, integrationID, env.ID, before.Status == "ACTIVE",
+				flags.timeout, endpoint)
 			if err != nil {
 				return result.Result{}, err
 			}
 			release, status = running.Release, running.Status
 			next = "Run wso2 intg integration logs " + integrationID + " --env " + env.ID + " to see what it does."
+			if !seen {
+				next = "It read ACTIVE throughout, and no rollout was seen within " + restartGrace.String() +
+					"; run wso2 intg integration deployment show " + integrationID + " --env " + env.ID +
+					" to check it."
+			}
 		}
 		return result.New(RedeploySchema).
 			With("integration", "Integration", integrationID).

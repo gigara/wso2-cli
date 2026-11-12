@@ -384,7 +384,7 @@ func TestBuildLogsWithoutAGatewayNamesHowToRecordOne(t *testing.T) {
 
 	outcome := run([]string{"integration", "build", "logs"}, []string{"order-api", "b1"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
-	assertProblem(t, outcome, "intg.observability_not_recorded", problem.CategoryAuthPolicy)
+	assertProblem(t, outcome, "intg.observability_not_recorded", problem.CategoryUsage)
 	for _, want := range []string{"wso2 context product add intg", "--gateway"} {
 		if !strings.Contains(outcome.Problem.Recovery, want) {
 			t.Errorf("recovery = %q, want it to name %q", outcome.Problem.Recovery, want)

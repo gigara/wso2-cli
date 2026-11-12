@@ -299,7 +299,7 @@ func TestIntegrationPromoteReportsAHopThePipelineRefuses(t *testing.T) {
 	outcome := run([]string{"integration", "promote"}, []string{"order-api", "--from", "development", "--to", "production",
 		"--project", "orders"}, stub.endpoint(), &testkit.Access{Token: "t"})
 
-	assertProblem(t, outcome, "intg.promotion_refused", problem.CategoryProductService)
+	assertProblem(t, outcome, "intg.promotion_refused", problem.CategoryAuthPolicy)
 	if !strings.Contains(outcome.Problem.Message, "is not allowed") {
 		t.Errorf("message = %q, want the API's words", outcome.Problem.Message)
 	}

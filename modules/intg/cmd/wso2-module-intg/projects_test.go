@@ -210,7 +210,7 @@ func TestAnEmptyProjectListSaysSo(t *testing.T) {
 func TestProjectListWithoutARecordedEndpointAsksForNoAccess(t *testing.T) {
 	outcome := run([]string{"project", "list"}, nil, "", &testkit.Access{Token: "t"})
 
-	assertProblem(t, outcome, "intg.product_not_recorded", problem.CategoryAuthPolicy)
+	assertProblem(t, outcome, "intg.product_not_recorded", problem.CategoryUsage)
 	if !strings.Contains(outcome.Problem.Recovery, "wso2 context product add intg --url") {
 		t.Errorf("recovery = %q, want it to name wso2 context product add intg", outcome.Problem.Recovery)
 	}
